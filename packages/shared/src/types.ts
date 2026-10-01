@@ -108,8 +108,11 @@ export type PromptKind =
   | "use_stim"
   | "jam"
   | "fate_hack"
+  | "choose"
   | "choose_hand_card"
   | "choose_discard"
+  | "choose_card"
+  | "supply_pick"
   | "reorder_deck"
   | "give_cards"
   | "standoff"
@@ -123,6 +126,15 @@ export interface Prompt {
   context: Record<string, unknown>;
   deadlineMs: number; // server epoch ms
 }
+
+/** A player's answer to a prompt. */
+export type RespondAction =
+  /** discard the listed card ids from hand (Evade/Strike/Stim/Jam/…) */
+  | { kind: "discard"; cardIds: string[] }
+  /** decline / pass / refuse */
+  | { kind: "decline" }
+  /** pick one option: a revealed card id, an equipment zone, a player id… */
+  | { kind: "choose"; choice: string };
 
 export interface GameSettings {
   turnTimerMs: number;

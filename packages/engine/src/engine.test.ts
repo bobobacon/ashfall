@@ -14,6 +14,7 @@ import {
   buildDeck,
   viewFor,
   distance,
+  respond,
   type Game,
 } from "./index.js";
 
@@ -355,16 +356,41 @@ describe("A5/A6 dying, death, win conditions", () => {
     return game;
   }
 
-  it("damage to 0 HP → death pipeline, role revealed, cards to discard (A5-04)", () => {
+  it("damage to 0 HP → dying prompts, declined saves → death pipeline (A5-04)", () => {
     const game = playing();
     const victim = game.state.turnOrder[1]!;
     const p = game.state.players[victim]!;
     const handBefore = [...p.hand];
-    dealDamage(game, { targetId: victim, amount: p.hp });
+    dealDamage(game, { targetId: victim, amount: p.hp, damageKind: "direct" });
+    // dying state opens save prompts; decline them all
+    let guard = 0;
+    while (game.state.pendingPrompts.length > 0 && guard++ < 20) {
+      const pr = game.state.pendingPrompts[0]!;
+      expect(pr.kind).toBe("use_stim");
+      respond(game, pr.playerId, pr.id, { kind: "decline" });
+    }
     expect(p.alive).toBe(false);
     expect(p.roleRevealed).toBe(true);
     expect(p.hand).toHaveLength(0);
     for (const c of handBefore) expect(game.state.discard).toContain(c);
+  });
+
+  it("dying player saved by Stim → survives at 1 HP (A5-02)", () => {
+    const game = playing();
+    const victim = game.state.turnOrder[1]!;
+    const p = game.state.players[victim]!;
+    // give victim a stim
+    const stimCard = game.state.deck.find((c) => game.cards.get(c)!.defId === "stim")!;
+    game.state.deck.splice(game.state.deck.indexOf(stimCard), 1);
+    p.hand.push(stimCard);
+    dealDamage(game, { targetId: victim, amount: p.hp, damageKind: "direct" });
+    // victim's own save prompt comes first
+    const pr = game.state.pendingPrompts[0]!;
+    expect(pr.playerId).toBe(victim);
+    respond(game, victim, pr.id, { kind: "discard", cardIds: [stimCard] });
+    expect(p.alive).toBe(true);
+    expect(p.hp).toBe(1);
+    expect(game.state.pendingPrompts).toHaveLength(0);
   });
 
   it("saveDying raises HP to 1 (A5-02 primitive)", () => {

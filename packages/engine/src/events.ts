@@ -20,6 +20,7 @@ export type GameEvent =
   | { type: "delayed_placed"; targetId: string; cardId: string; defId: string; placedBy: string }
   | { type: "fate_check"; forCardId?: string; forPlayerId?: string; cardId: string; suit: string; number: number; outcome: string }
   | { type: "damage"; targetId: string; amount: number; element: string; sourcePlayerId?: string; sourceCardId?: string }
+  | { type: "damage_blocked"; targetId: string; amount: number; by: string }
   | { type: "heal"; targetId: string; amount: number; sourcePlayerId?: string; sourceCardId?: string }
   | { type: "dying"; playerId: string }
   | { type: "saved"; playerId: string }
