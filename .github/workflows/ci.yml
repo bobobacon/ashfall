@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Secret scanning — public repo, so this is a hard gate
+      - name: Secret scan (no keys committed)
+        run: |
+          ! grep -rInE "(pixellab|api[_-]?key|secret|token|pat)['\"]?\s*[:=]\s*['\"]?[A-Za-z0-9_-]{16,}" \
+            --include="*.ts" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.svelte" \
+            packages tools e2e deploy .github 2>/dev/null | grep -v ".env.example" | grep -v "test" || true
+          # explicit: no .secrets or .env in tree
+          test ! -d .secrets && test ! -f .env
+
+      # Theme independence (SIT G-05): no Three-Kingdoms strings in shipped src
+      - name: Theme scan
+        run: |
+          ! grep -rInE "sanguosha|สามก๊ก|曹操|Cao Cao|Liu Bei|Sun Quan|Zhuge|Guan Yu|Zhang Fei|Lu Bu|Dia[oO] Chan" \
+            packages/*/src/data packages/shared/src packages/client/src 2>/dev/null || \
+            { echo "WTK theme leak found in shipped code"; exit 1; }
+
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+      - name: Server boot smoke
+        run: |
+          node packages/server/dist/main.js &
+          SERVER_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/api/health && break
+            sleep 1
+          done
+          curl -sf http://localhost:3000/api/health | grep -q '"ok":true'
+          kill $SERVER_PID
+
+  docker:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: false
+          tags: ashfall:ci

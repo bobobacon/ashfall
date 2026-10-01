@@ -1,0 +1,583 @@
+[
+  {
+    "id": "baron_kaine",
+    "name": { "en": "Baron Kaine, the Architect", "th": "บารอนเคน ผู้สร้าง" },
+    "faction": "syndicate",
+    "gender": "male",
+    "maxHp": 4,
+    "isLeader": true,
+    "skills": [
+      {
+        "id": "scrap_reclaim",
+        "name": { "en": "Scrap Reclaim", "th": "เก็บเศษกลยุทธ์" },
+        "description": {
+          "en": "When you take damage from a card, you may take that card into your hand.",
+          "th": "เมื่อได้รับความเสียหายจากการ์ด สามารถเก็บการ์ดใบนั้นขึ้นมือ"
+        },
+        "kind": "passive"
+      },
+      {
+        "id": "iron_decree",
+        "name": { "en": "Iron Decree", "th": "บัญชาเหล็ก" },
+        "description": {
+          "en": "Sovereign skill: command another Syndicate player to discard an Evade on your behalf.",
+          "th": "สกิลอธิราช: ขอให้ผู้เล่นสหภาพเหล็กคนอื่นทิ้งการ์ดหลบหลีกแทนตนเอง"
+        },
+        "kind": "sovereign"
+      }
+    ]
+  },
+  {
+    "id": "vex",
+    "name": { "en": "Vex, the Whisper", "th": "เว็กซ์ กระซิบเงา" },
+    "faction": "syndicate",
+    "gender": "male",
+    "maxHp": 3,
+    "skills": [
+      {
+        "id": "fate_hack",
+        "name": { "en": "Fate Hack", "th": "แฮ็คลิขิต" },
+        "description": {
+          "en": "Replace any Fate Card in play with a card from your hand.",
+          "th": "เปลี่ยนการ์ดตัดสินบนสนามด้วยการ์ดบนมือตนเอง"
+        },
+        "kind": "passive"
+      },
+      {
+        "id": "backstab",
+        "name": { "en": "Backstab", "th": "ตลบหลัง" },
+        "description": {
+          "en": "After you take damage from a player, take 1 random card from their hand.",
+          "th": "เมื่อได้รับความเสียหายจากใคร สุ่มหยิบการ์ด 1 ใบจากมือคนนั้น"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "oracle",
+    "name": { "en": "Oracle", "th": "ออราเคิล ผู้หยั่งรู้" },
+    "faction": "syndicate",
+    "gender": "male",
+    "maxHp": 3,
+    "skills": [
+      {
+        "id": "foresight",
+        "name": { "en": "Foresight", "th": "นิมิตสวรรค์" },
+        "description": {
+          "en": "Each time you lose 1 HP, draw 2 cards and give them to any players.",
+          "th": "ทุกครั้งที่เสีย 1 HP จะได้จั่วการ์ด 2 ใบ และเลือกแจกให้ใครก็ได้"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "grim_one_eye",
+    "name": { "en": "Grim \"One-Eye\"", "th": "กริม ตาเดียว" },
+    "faction": "syndicate",
+    "gender": "male",
+    "maxHp": 4,
+    "skills": [
+      {
+        "id": "blood_debt",
+        "name": { "en": "Blood Debt", "th": "หนี้เลือด" },
+        "description": {
+          "en": "After you take damage, reveal a Fate Card: if not heart, the source discards 1 card or loses 1 HP.",
+          "th": "เมื่อได้รับดาเมจ เปิดการ์ดตัดสิน หากไม่ใช่โพแดง คนทำดาเมจต้องทิ้งการ์ด 1 ใบหรือเสีย 1 HP"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "marauder_kesh",
+    "name": { "en": "Marauder Kesh", "th": "เคช ผู้ปล้นชิง" },
+    "faction": "syndicate",
+    "gender": "male",
+    "maxHp": 4,
+    "skills": [
+      {
+        "id": "highwayman",
+        "name": { "en": "Highwayman", "th": "จู่โจมฉับพลัน" },
+        "description": {
+          "en": "During your draw phase, you may steal 1 card from each of 1–2 players instead of drawing.",
+          "th": "ในเฟสจั่วการ์ด สามารถเลือกไม่จั่ว แต่ขโมยการ์ดบนมือผู้เล่นอื่น 1-2 คน คนละ 1 ใบแทน"
+        },
+        "kind": "active"
+      }
+    ]
+  },
+  {
+    "id": "brute_barehide",
+    "name": { "en": "Brute \"Barehide\"", "th": "บรู๊ต หนังเปลือย" },
+    "faction": "syndicate",
+    "gender": "male",
+    "maxHp": 4,
+    "skills": [
+      {
+        "id": "chem_rage",
+        "name": { "en": "Chem Rage", "th": "คลุ้มคลั่ง" },
+        "description": {
+          "en": "In your draw phase, draw 1 fewer card; your Strikes and Standoffs deal +1 damage this turn.",
+          "th": "ในเฟสจั่ว เลือกจั่วลดลง 1 ใบ แต่จู่โจมและการดวลของเทิร์นนี้แรงขึ้น +1"
+        },
+        "kind": "active"
+      }
+    ]
+  },
+  {
+    "id": "bastion",
+    "name": { "en": "Bastion", "th": "บาสเตียน ป้อมเหล็ก" },
+    "faction": "syndicate",
+    "gender": "male",
+    "maxHp": 4,
+    "skills": [
+      {
+        "id": "bunker_down",
+        "name": { "en": "Bunker Down", "th": "ตั้งรับเหนียวแน่น" },
+        "description": {
+          "en": "At end of turn, you may draw 3 cards; if you do, skip your next turn.",
+          "th": "จบเทิร์นสามารถจั่วฟรี 3 ใบ แต่เทิร์นถัดไปจะถูกข้าม"
+        },
+        "kind": "active"
+      }
+    ]
+  },
+  {
+    "id": "matriarch_vala",
+    "name": { "en": "Matriarch Vala", "th": "มาตาร์ควาลา มารดาไพร" },
+    "faction": "verdant",
+    "gender": "female",
+    "maxHp": 4,
+    "isLeader": true,
+    "skills": [
+      {
+        "id": "almsgiver",
+        "name": { "en": "Almsgiver", "th": "เปี่ยมเมตตา" },
+        "description": {
+          "en": "You may give hand cards to others; if you gave 2+ this turn, recover 1 HP.",
+          "th": "แจกการ์ดให้คนอื่นได้ หากแจกครบ 2 ใบขึ้นไปในรอบนั้น ฟื้นฟู 1 HP"
+        },
+        "kind": "active"
+      },
+      {
+        "id": "blood_oath",
+        "name": { "en": "Blood Oath", "th": "สาบานโลหิต" },
+        "description": {
+          "en": "Sovereign skill: command another Verdant player to use a Strike on your behalf.",
+          "th": "สกิลอธิราช: สั่งให้ชาวพงไพรคนอื่นใช้การ์ดโจมตีแทนตนเอง"
+        },
+        "kind": "sovereign"
+      }
+    ]
+  },
+  {
+    "id": "ronan_crimson_blade",
+    "name": { "en": "Ronan, the Crimson Blade", "th": "โรนัน ดาบชาด" },
+    "faction": "verdant",
+    "gender": "male",
+    "maxHp": 4,
+    "skills": [
+      {
+        "id": "war_saint",
+        "name": { "en": "War Saint", "th": "นักบุญสงคราม" },
+        "description": {
+          "en": "Every red card you own (hand or equipment) can be used as a Strike.",
+          "th": "เปลี่ยนการ์ดสีแดงทุกใบ (บนมือหรืออุปกรณ์) ให้เป็นจู่โจมได้"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "grog_thunderlung",
+    "name": { "en": "Grog \"Thunderlung\"", "th": "กร็อก ปอดเหล็ก" },
+    "faction": "verdant",
+    "gender": "male",
+    "maxHp": 4,
+    "skills": [
+      {
+        "id": "war_bellow",
+        "name": { "en": "War Bellow", "th": "ตวาดสะท้าน" },
+        "description": {
+          "en": "You may use any number of Strikes per turn.",
+          "th": "ใช้การ์ดจู่โจมกี่ครั้งก็ได้ใน 1 เทิร์น"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "wraith_white_ghost",
+    "name": { "en": "Wraith, the White Ghost", "th": "เรธ เงาขาว" },
+    "faction": "verdant",
+    "gender": "male",
+    "maxHp": 4,
+    "skills": [
+      {
+        "id": "phase_step",
+        "name": { "en": "Phase Step", "th": "รุกรับไร้รอยต่อ" },
+        "description": {
+          "en": "Your Strikes can be used as Evades and your Evades as Strikes.",
+          "th": "ใช้โจมตีแทนหลบหลีก หรือหลบหลีกแทนโจมตีได้"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "rider_kaan",
+    "name": { "en": "Rider Kaan", "th": "คาน ขี่มรณะ" },
+    "faction": "verdant",
+    "gender": "male",
+    "maxHp": 4,
+    "skills": [
+      {
+        "id": "iron_charge",
+        "name": { "en": "Iron Charge", "th": "ม้าเหล็ก" },
+        "description": {
+          "en": "Your distance to everyone is always −1. When you Strike, target makes a Fate Check: non-heart → target cannot Evade.",
+          "th": "มองเห็นคนอื่นใกล้ขึ้น 1 เสมอ เมื่อโจมตี เป้าหมายต้องตัดสิน หากไม่ใช่โพแดงจะใช้หลบหลีกไม่ได้"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "old_eye_hale",
+    "name": { "en": "Old-Eye Hale", "th": "เฮล ตาเหยี่ยว" },
+    "faction": "verdant",
+    "gender": "male",
+    "maxHp": 4,
+    "skills": [
+      {
+        "id": "deadeye",
+        "name": { "en": "Deadeye", "th": "ศรทะลวง" },
+        "description": {
+          "en": "Your Strike target cannot Evade if their hand size ≥ your current HP, or they have no equipment.",
+          "th": "เมื่อโจมตีเป้าหมายที่มีการ์ดบนมือ ≥ HP ปัจจุบันของเรา หรือไม่มีอุปกรณ์ เป้าหมายใช้หลบหลีกไม่ได้"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "sage_aldric",
+    "name": { "en": "Sage Aldric", "th": "อัลดริค ปราชญ์เฒ่า" },
+    "faction": "verdant",
+    "gender": "male",
+    "maxHp": 3,
+    "skills": [
+      {
+        "id": "drone_scout",
+        "name": { "en": "Drone Scout", "th": "โดรนหยั่งรู้" },
+        "description": {
+          "en": "At turn start, peek at the top 2–5 deck cards and reorder them.",
+          "th": "เริ่มเทิร์นแอบดูการ์ดใบบนสุดของกองจั่ว 2-5 ใบ แล้วจัดเรียงใหม่ตามใจชอบ"
+        },
+        "kind": "active"
+      },
+      {
+        "id": "ghost_signal",
+        "name": { "en": "Ghost Signal", "th": "สัญญาณผี" },
+        "description": {
+          "en": "While your hand is empty, no one can target you with Strikes or single-target tactics.",
+          "th": "หากไม่มีการ์ดบนมือเหลือเลย จะไม่มีใครใช้โจมตีหรืออุบายเจาะจงเป้าหมายใส่เราได้"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "tide_lord_soran",
+    "name": { "en": "Tide Lord Soran", "th": "โซราน เจ้าคลื่นเพลิง" },
+    "faction": "tide",
+    "gender": "male",
+    "maxHp": 4,
+    "isLeader": true,
+    "skills": [
+      {
+        "id": "reforge",
+        "name": { "en": "Reforge", "th": "ผลัดแผ่นดิน" },
+        "description": {
+          "en": "Discard any number of cards, then draw the same number.",
+          "th": "ทิ้งการ์ดกี่ใบก็ได้เพื่อจั่วใหม่ในจำนวนเท่าเดิม"
+        },
+        "kind": "active"
+      },
+      {
+        "id": "tides_mercy",
+        "name": { "en": "Tide's Mercy", "th": "เมตตาคลื่น" },
+        "description": {
+          "en": "Sovereign skill: when dying, command another Tide player to give you a Stim.",
+          "th": "สกิลอธิราช: สั่งให้ชาวคลื่นเพลิงคนอื่นส่งสเตมมาช่วยชีวิตตอนปางตาย"
+        },
+        "kind": "sovereign"
+      }
+    ]
+  },
+  {
+    "id": "ember_sage_ryn",
+    "name": { "en": "Ember Sage Ryn", "th": "ริน นักปราชญ์เถ้า" },
+    "faction": "tide",
+    "gender": "male",
+    "maxHp": 3,
+    "skills": [
+      {
+        "id": "chain_burn",
+        "name": { "en": "Chain Burn", "th": "ค่ายกลละลายทัพ" },
+        "description": {
+          "en": "Whenever your last hand card is played or discarded, draw 1.",
+          "th": "เมื่อใช้หรือทิ้งการ์ดใบสุดท้ายบนมือจนหมด ได้จั่วการ์ดฟรี 1 ใบทันที"
+        },
+        "kind": "passive"
+      },
+      {
+        "id": "ashwalk",
+        "name": { "en": "Ashwalk", "th": "เจนโลก" },
+        "description": {
+          "en": "You cannot be targeted by Lockdown or Ration Cut.",
+          "th": "กันอุบายหน่วงเวลา กักบริเวณ และขาดเสบียง"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "vesper_blade_dancer",
+    "name": { "en": "Vesper, the Blade Dancer", "th": "เวสเปอร์ นักดาบระบำ" },
+    "faction": "tide",
+    "gender": "female",
+    "maxHp": 3,
+    "skills": [
+      {
+        "id": "bond_weave",
+        "name": { "en": "Bond Weave", "th": "สายใยผูกพัน" },
+        "description": {
+          "en": "Discard 1 of your equipment: heal yourself 1 HP and heal 1 male player 1 HP.",
+          "th": "ทิ้งอุปกรณ์ตัวเอง 1 ใบ ฟื้นเลือดตัวเอง 1 และฟื้นชายอีกคน 1 HP"
+        },
+        "kind": "active"
+      },
+      {
+        "id": "salvage",
+        "name": { "en": "Salvage", "th": "เชี่ยวชาญอาวุธ" },
+        "description": {
+          "en": "Whenever your installed equipment is destroyed or removed, draw 2.",
+          "th": "ทุกครั้งที่อุปกรณ์ที่ติดตั้งถูกทำลายหรือถอดออก ได้จั่วฟรี 2 ใบ"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "corsair_bell",
+    "name": { "en": "Corsair Bell", "th": "เบล โจรสลัดระฆัง" },
+    "faction": "tide",
+    "gender": "male",
+    "maxHp": 4,
+    "skills": [
+      {
+        "id": "boarding_raid",
+        "name": { "en": "Boarding Raid", "th": "ปล้นค่ายทัพ" },
+        "description": {
+          "en": "Every black card you own can be used as Sabotage.",
+          "th": "เปลี่ยนการ์ดสีดำทุกใบเป็นอุบายวินาศกรรมได้"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "quartermaster_orlo",
+    "name": { "en": "Quartermaster Orlo", "th": "ออร์โล ผู้คุมเสบียง" },
+    "faction": "tide",
+    "gender": "male",
+    "maxHp": 3,
+    "skills": [
+      {
+        "id": "ration_share",
+        "name": { "en": "Ration Share", "th": "เกื้อหนุน" },
+        "description": {
+          "en": "In your draw phase, you may draw 2 extra, then give 2 hand cards to the fewest-hand player.",
+          "th": "ในเฟสจั่ว เลือกจั่วเพิ่ม 2 ใบ แล้วส่งการ์ดบนมือ 2 ใบให้ผู้เล่นที่มีการ์ดน้อยที่สุด"
+        },
+        "kind": "active"
+      },
+      {
+        "id": "barter",
+        "name": { "en": "Barter", "th": "สลับไพ่" },
+        "description": {
+          "en": "Choose 2 players: they swap their entire hands.",
+          "th": "เลือกผู้เล่น 2 คน แล้วสั่งให้สลับการ์ดบนมือทั้งหมดกัน"
+        },
+        "kind": "active"
+      }
+    ]
+  },
+  {
+    "id": "siren_lyra",
+    "name": { "en": "Siren Lyra", "th": "ไลรา ไซเรน" },
+    "faction": "tide",
+    "gender": "female",
+    "maxHp": 3,
+    "skills": [
+      {
+        "id": "lullaby",
+        "name": { "en": "Lullaby", "th": "บ่วงเสน่หา" },
+        "description": {
+          "en": "Every diamond card you own can be placed as a Lockdown on any player.",
+          "th": "เปลี่ยนการ์ดข้าวหลามตัดทุกใบเป็นกักบริเวณ ไปวางหน้าใครก็ได้"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "nyx_the_veil",
+    "name": { "en": "Nyx, the Veil", "th": "นิกซ์ ม่านเงา" },
+    "faction": "tide",
+    "gender": "female",
+    "maxHp": 3,
+    "skills": [
+      {
+        "id": "misdirect",
+        "name": { "en": "Misdirect", "th": "เบี่ยงแรงแค้น" },
+        "description": {
+          "en": "When you would take damage, discard 1 spade card to redirect it all to another player; that player draws cards equal to the damage.",
+          "th": "เมื่อจะได้รับความเสียหาย ทิ้งการ์ดโพดำ 1 ใบเพื่อโอนความเสียหายไปให้คนอื่นรับแทน ผู้รับจะได้จั่วตามจำนวนดาเมจ"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "warlord_karn",
+    "name": { "en": "Warlord Karn, the Warhound", "th": "คาร์น สุนัขสงคราม" },
+    "faction": "walker",
+    "gender": "male",
+    "maxHp": 4,
+    "skills": [
+      {
+        "id": "apex_predator",
+        "name": { "en": "Apex Predator", "th": "นักรบไร้เทียมทาน" },
+        "description": {
+          "en": "Targets of your Strike or Standoff must discard 2 Evades / 2 Strikes at once to survive.",
+          "th": "โจมตีหรือดวลใส่ใคร เป้าหมายต้องทิ้งหลบหลีก 2 ใบพร้อมกันถึงจะรอด"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "femme_black_widow",
+    "name": { "en": "Femme, the Black Widow", "th": "ฟาม แม่ม่ายดำ" },
+    "faction": "walker",
+    "gender": "female",
+    "maxHp": 3,
+    "skills": [
+      {
+        "id": "honey_trap",
+        "name": { "en": "Honey Trap", "th": "กลสาวงาม" },
+        "description": {
+          "en": "Discard 1 card: force 2 male players into a Standoff against each other.",
+          "th": "ทิ้งการ์ด 1 ใบ บังคับชาย 2 คนดวลการ์ดจู่โจมกันเอง"
+        },
+        "kind": "active"
+      },
+      {
+        "id": "night_veil",
+        "name": { "en": "Night Veil", "th": "ปิดหน้าต่างประจัญ" },
+        "description": {
+          "en": "Draw 1 card at the end of your turn.",
+          "th": "จบเทิร์นได้จั่วการ์ดฟรี 1 ใบ"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "doc_mort",
+    "name": { "en": "Doc Mort, the Plague Saw", "th": "ด็อกมอร์ต ศัลยแพทย์กาฬ" },
+    "faction": "walker",
+    "gender": "male",
+    "maxHp": 3,
+    "skills": [
+      {
+        "id": "field_surgery",
+        "name": { "en": "Field Surgery", "th": "หมอเทวดา" },
+        "description": {
+          "en": "Every red card you own can be used as a Stim.",
+          "th": "เปลี่ยนการ์ดสีแดงทุกใบเป็นเข็มฟื้นฟูช่วยคนปางตายได้"
+        },
+        "kind": "passive"
+      },
+      {
+        "id": "triage",
+        "name": { "en": "Triage", "th": "ล้างพิษ" },
+        "description": {
+          "en": "On your turn, discard 1 card to heal yourself or any injured player 1 HP.",
+          "th": "ในเทิร์นตัวเอง ทิ้งการ์ด 1 ใบเพื่อฟื้นฟู 1 HP ให้ตนเองหรือผู้เล่นที่บาดเจ็บ"
+        },
+        "kind": "active"
+      }
+    ]
+  },
+  {
+    "id": "baron_howl",
+    "name": { "en": "Baron Howl, the Artillery", "th": "ฮาวล์ จอมกระสุน" },
+    "faction": "walker",
+    "gender": "male",
+    "maxHp": 4,
+    "skills": [
+      {
+        "id": "satellite_call",
+        "name": { "en": "Satellite Call", "th": "ศรกระหน่ำ" },
+        "description": {
+          "en": "Discard 2 cards of the same suit to trigger a Mortar Rain without the card.",
+          "th": "ทิ้งการ์ดดอกเดียวกัน 2 ใบเพื่อเปิดใช้ฝนปืนครกโดยไม่ต้องมีการ์ดจริง"
+        },
+        "kind": "active"
+      }
+    ]
+  },
+  {
+    "id": "crimson_judge",
+    "name": { "en": "The Crimson Judge", "th": "ผู้พิพากษาชาด" },
+    "faction": "ascendant",
+    "gender": "male",
+    "maxHp": 5,
+    "expansion": true,
+    "skills": [
+      {
+        "id": "soul_ledger",
+        "name": { "en": "Soul Ledger", "th": "วิญญาณแค้น" },
+        "description": {
+          "en": "Each time you lose HP, mark the damager. When you die, the most-marked player makes a Fate Check: non-heart → they die too.",
+          "th": "ทุกครั้งที่เสีย HP จะมาร์กแต้มแค้นบนตัวคนตี เมื่อตาย คนที่มีแต้มเยอะสุดต้องตัดสิน หากไม่ใช่โพแดงจะตายตาม"
+        },
+        "kind": "passive"
+      }
+    ]
+  },
+  {
+    "id": "hollow_king",
+    "name": { "en": "The Hollow King", "th": "ราชันกลวง" },
+    "faction": "ascendant",
+    "gender": "male",
+    "maxHp": 3,
+    "expansion": true,
+    "skills": [
+      {
+        "id": "void_tithe",
+        "name": { "en": "Void Tithe", "th": "สยบปฐพี" },
+        "description": {
+          "en": "When you take 1 damage, draw 1 card from every player, then flip your survivor card face-down.",
+          "th": "เมื่อได้รับความเสียหาย 1 หน่วย จั่วการ์ดจากผู้เล่นทุกคนคนละ 1 ใบ แล้วพลิกการ์ดขุนพลคว่ำ"
+        },
+        "kind": "passive"
+      }
+    ]
+  }
+]

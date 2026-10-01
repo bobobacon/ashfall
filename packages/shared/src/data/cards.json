@@ -1,0 +1,278 @@
+[
+  {
+    "defId": "strike",
+    "name": { "en": "Strike", "th": "จู่โจม" },
+    "category": "basic",
+    "element": "none",
+    "targets": { "kind": "within_attack_range" },
+    "text": {
+      "en": "Deal 1 damage to a target in range. Once per turn.",
+      "th": "สร้างความเสียหาย 1 แก่เป้าหมายในระยะ ใช้ได้ 1 ครั้งต่อเทิร์น"
+    }
+  },
+  {
+    "defId": "evade",
+    "name": { "en": "Evade", "th": "หลบหลีก" },
+    "category": "basic",
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Response: cancel an incoming Strike.",
+      "th": "ใช้สวนกลับทันทีเพื่อยกเลิกจู่โจมที่กำลังจะโดน"
+    }
+  },
+  {
+    "defId": "stim",
+    "name": { "en": "Stim", "th": "เข็มฟื้นฟู" },
+    "category": "basic",
+    "element": "none",
+    "targets": { "kind": "any_player" },
+    "text": {
+      "en": "Own turn: heal 1 HP. Any turn: save a dying player.",
+      "th": "เทิร์นตัวเองฟื้น 1 HP หรือใช้ช่วยผู้เล่นปางตายในเทิร์นคนอื่น"
+    }
+  },
+  {
+    "defId": "chem_brew",
+    "name": { "en": "Chem Brew", "th": "เคมีคลั่ง" },
+    "category": "basic",
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Own turn: next Strike deals +1 damage. When dying: self-heal 1 (cannot save others).",
+      "th": "เทิร์นตัวเอง: จู่โจมใบถัดไปแรง +1 หรือใช้ตอนปางตายฟื้นเอง 1 (ช่วยคนอื่นไม่ได้)"
+    }
+  },
+  {
+    "defId": "scavenge",
+    "name": { "en": "Scavenge", "th": "ฉกเศษเหล็ก" },
+    "category": "tactic",
+    "element": "none",
+    "targets": { "kind": "within_distance", "range": 1 },
+    "text": {
+      "en": "Take 1 random hand card or 1 equipment from a player within distance 1.",
+      "th": "สุ่มหยิบการ์ด 1 ใบจากมือหรืออุปกรณ์ของผู้เล่นระยะ 1"
+    }
+  },
+  {
+    "defId": "sabotage",
+    "name": { "en": "Sabotage", "th": "วินาศกรรม" },
+    "category": "tactic",
+    "element": "none",
+    "targets": { "kind": "any_player" },
+    "text": {
+      "en": "Destroy any 1 card of any player (hand, equipment, or delayed). No range limit.",
+      "th": "เลือกทำลายการ์ด 1 ใบของผู้เล่นคนไหนก็ได้ ไม่จำกัดระยะ"
+    }
+  },
+  {
+    "defId": "proxy_war",
+    "name": { "en": "Proxy War", "th": "ยืมมือสังหาร" },
+    "category": "tactic",
+    "element": "none",
+    "targets": { "kind": "player_with_weapon" },
+    "text": {
+      "en": "Force player A to Strike player B; if A refuses, you take A's weapon.",
+      "th": "บังคับ A โจมตี B หากไม่ทำ เราได้การ์ดอาวุธของ A"
+    }
+  },
+  {
+    "defId": "standoff",
+    "name": { "en": "Standoff", "th": "ดวลปืน" },
+    "category": "tactic",
+    "element": "none",
+    "targets": { "kind": "any_player" },
+    "text": {
+      "en": "You and target alternate discarding Strikes. First who can't takes 1 damage.",
+      "th": "ดวลทิ้งการ์ดจู่โจมสลับกัน ใครไม่มีก่อนเสีย 1 HP"
+    }
+  },
+  {
+    "defId": "supply_drop",
+    "name": { "en": "Supply Drop", "th": "กล่องเสบียง" },
+    "category": "tactic",
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Reveal cards equal to alive players; each picks 1 in turn order.",
+      "th": "เปิดการ์ดจากกองกลางเท่าจำนวนผู้เล่นที่ยังมีชีวิต หยิบคนละ 1 ใบตามลำดับ"
+    }
+  },
+  {
+    "defId": "mortar_rain",
+    "name": { "en": "Mortar Rain", "th": "ฝนปืนครก" },
+    "category": "tactic",
+    "element": "none",
+    "targets": { "kind": "all_others" },
+    "text": {
+      "en": "Every other player discards an Evade or takes 1 damage.",
+      "th": "ผู้เล่นคนอื่นทุกคนต้องทิ้งหลบหลีก ไม่งั้นเสีย 1 HP"
+    }
+  },
+  {
+    "defId": "mutant_horde",
+    "name": { "en": "Mutant Horde", "th": "ฝูงกลายพันธุ์" },
+    "category": "tactic",
+    "element": "none",
+    "targets": { "kind": "all_others" },
+    "text": {
+      "en": "Every other player discards a Strike or takes 1 damage.",
+      "th": "ผู้เล่นคนอื่นทุกคนต้องทิ้งจู่โจม ไม่งั้นเสีย 1 HP"
+    }
+  },
+  {
+    "defId": "field_clinic",
+    "name": { "en": "Field Clinic", "th": "คลินิกสนาม" },
+    "category": "tactic",
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "All injured players heal 1 HP.",
+      "th": "ผู้เล่นทุกคนที่บาดเจ็บได้รับการฟื้นฟู 1 HP"
+    }
+  },
+  {
+    "defId": "signal_jam",
+    "name": { "en": "Signal Jam", "th": "คลื่นรบกวน" },
+    "category": "tactic",
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Response: cancel any tactic or judgment effect in progress. Chainable.",
+      "th": "ยกเลิกเอฟเฟกต์การ์ดอุบายหรือการตัดสินที่กำลังจะเกิด ใช้ต่อกันเป็นลูกโซ่ได้"
+    }
+  },
+  {
+    "defId": "ion_storm",
+    "name": { "en": "Ion Storm", "th": "พายไอออน" },
+    "category": "delay",
+    "element": "ion",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Place on self; judge at next turn start. Spade 2–9: take 3 Ion damage. Else passes to next player.",
+      "th": "วางหน้าตัวเอง ตัดสินเทิร์นหน้า หากได้โพดำ 2-9 โดน 3 HP (ธาตุไอออน) ไม่งั้นส่งต่อผู้เล่นถัดไป"
+    }
+  },
+  {
+    "defId": "ration_cut",
+    "name": { "en": "Ration Cut", "th": "ขาดเสบียง" },
+    "category": "delay",
+    "element": "none",
+    "targets": { "kind": "within_distance", "range": 1 },
+    "text": {
+      "en": "Judge at target's turn start. If not club: skip Draw Phase.",
+      "th": "วางหน้าเป้าหมายระยะ 1 หากตัดสินไม่ใช่ดอกจิก ถูกข้ามเฟสจั่วการ์ด"
+    }
+  },
+  {
+    "defId": "lockdown",
+    "name": { "en": "Lockdown", "th": "กักบริเวณ" },
+    "category": "delay",
+    "element": "none",
+    "targets": { "kind": "any_player" },
+    "text": {
+      "en": "Judge at target's turn start. If not heart: skip Play Phase.",
+      "th": "วางหน้าเป้าหมายใดก็ได้ หากตัดสินไม่ใช่โพแดง ถูกข้ามเฟสใช้การ์ด"
+    }
+  },
+  {
+    "defId": "auto_rifle",
+    "name": { "en": "Auto-Rifle", "th": "ปืนกลอัตโนมัติ" },
+    "category": "equipment",
+    "subtype": "weapon",
+    "range": 1,
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Weapon (range 1): unlimited Strikes per turn.",
+      "th": "อาวุธระยะ 1: ใช้จู่โจมกี่ครั้งก็ได้ต่อเทิร์น"
+    }
+  },
+  {
+    "defId": "plasma_cutter",
+    "name": { "en": "Plasma Cutter", "th": "คมพลาสมา" },
+    "category": "equipment",
+    "subtype": "weapon",
+    "range": 2,
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Weapon (range 2): your Strikes ignore the target's armor.",
+      "th": "อาวุธระยะ 2: โจมตีทะลุและยกเลิกคุณสมบัติเกราะเป้าหมาย"
+    }
+  },
+  {
+    "defId": "scrap_launcher",
+    "name": { "en": "Scrap Launcher", "th": "เครื่องยิงเศษเหล็ก" },
+    "category": "equipment",
+    "subtype": "weapon",
+    "range": 3,
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Weapon (range 3): you may discard 2 hand cards as a Strike.",
+      "th": "อาวุธระยะ 3: ทิ้งการ์ดบนมือ 2 ใบแทนการใช้จู่โจม 1 ใบ"
+    }
+  },
+  {
+    "defId": "railgun",
+    "name": { "en": "Railgun", "th": "ปืนรางแม่เหล็ก" },
+    "category": "equipment",
+    "subtype": "weapon",
+    "range": 5,
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Weapon (range 5): if your Strike is evaded, discard 2 to Strike another target.",
+      "th": "อาวุธระยะ 5: หากโจมตีแล้วเป้าหมายหลบได้ ทิ้งการ์ด 2 ใบเพื่อโจมตีเป้าหมายอื่นต่อ"
+    }
+  },
+  {
+    "defId": "holo_barrier",
+    "name": { "en": "Holo-Barrier", "th": "ม่านแสง" },
+    "category": "equipment",
+    "subtype": "armor",
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Armor: when Struck, free judgment — red counts as an Evade.",
+      "th": "เกราะ: เมื่อโดนโจมตี ได้สิทธิ์ตัดสินฟรี ถ้าออกสีแดงถือว่าหลบได้"
+    }
+  },
+  {
+    "defId": "kevlar_mesh",
+    "name": { "en": "Kevlar Mesh", "th": "เกราะเคฟลาร์" },
+    "category": "equipment",
+    "subtype": "armor",
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Armor: blocks Mortar Rain, Mutant Horde and normal Strike damage; Burn effects deal +1 to you.",
+      "th": "เกราะ: กันฝนปืนครก ฝูงกลายพันธุ์ และโจมตีธรรมดา แต่แพ้ธาตุไฟ รับดาเมจ +1"
+    }
+  },
+  {
+    "defId": "bulwark_rig",
+    "name": { "en": "Bulwark Rig", "th": "ป้อมเคลื่อนที่" },
+    "category": "equipment",
+    "subtype": "rig_plus",
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Vehicle (+1): other players' distance to you increases by 1.",
+      "th": "ยานพาหนะ +1: คนอื่นมองเห็นเราไกลขึ้น 1 หน่วย"
+    }
+  },
+  {
+    "defId": "scout_bike",
+    "name": { "en": "Scout Bike", "th": "ไบค์สอดแนม" },
+    "category": "equipment",
+    "subtype": "rig_minus",
+    "element": "none",
+    "targets": { "kind": "none" },
+    "text": {
+      "en": "Vehicle (−1): your distance to other players decreases by 1.",
+      "th": "ยานพาหนะ -1: เรามองเห็นคนอื่นใกล้ขึ้น 1 หน่วย"
+    }
+  }
+]

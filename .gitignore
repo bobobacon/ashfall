@@ -1,0 +1,33 @@
+# deps
+node_modules/
+
+# builds
+dist/
+packages/client/dist/
+*.tsbuildinfo
+
+# env & secrets — NEVER commit
+.env
+.env.*
+!.env.example
+.secrets/
+
+# databases (ephemeral / local dev)
+*.db
+*.db-journal
+*.sqlite
+
+# test artifacts
+coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# artgen working files (generated art IS committed under packages/client/src/assets/generated)
+tools/artgen/work/
+tools/artgen/ledger.db
+
+# os / editor
+.DS_Store
+*.log

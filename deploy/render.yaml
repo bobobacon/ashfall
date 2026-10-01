@@ -1,0 +1,40 @@
+# Render Blueprint — ASHFALL: The Last Bastion
+# Creates both services from this repo. Free tier: spins down when idle (cold start ~30s),
+# ephemeral disk (SQLite is best-effort by design — see docs/07-deployment.md).
+services:
+  - type: web
+    name: ashfall
+    runtime: docker
+    plan: free
+    dockerfilePath: ./deploy/Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DB_PATH
+        value: ":memory:"
+      - key: KEEP_ALIVE_SELF_PING
+        value: "false"
+      - key: ADMIN_ART_ENABLED
+        value: "false"
+      # NOTE: PIXELLAB_API_KEY intentionally ABSENT in prod (art is baked into the image)
+
+  - type: web
+    name: ashfall-staging
+    runtime: docker
+    plan: free
+    branch: main
+    autoDeploy: true
+    dockerfilePath: ./deploy/Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DB_PATH
+        value: ":memory:"
+      - key: ADMIN_ART_ENABLED
+        value: "false"

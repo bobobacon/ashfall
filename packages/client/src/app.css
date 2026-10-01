@@ -1,0 +1,37 @@
+/* ASHFALL wasteland theme — faction tokens shared with art pipeline (doc 03) */
+:root {
+  --bg-ash: #16130f;
+  --bg-panel: #221d17;
+  --text-bone: #e8e0cf;
+  --text-dim: #9a917f;
+  --syndicate: #4a7fb5;
+  --verdant: #5fb55f;
+  --tide: #d95f2b;
+  --walker: #b0a899;
+  --ascendant: #f5d76e;
+  --sovereign: #e8c547;
+  --warden: #5fb55f;
+  --raider: #c8402f;
+  --phantom: #4a7fb5;
+  --accent-glow: #7dff9e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-ash);
+  color: var(--text-bone);
+  font-family: "Courier New", monospace;
+}
+
+/* ALL pixel art renders crisp at integer scale */
+img,
+.pixel {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
