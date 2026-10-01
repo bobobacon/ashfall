@@ -1,40 +1,52 @@
-// Card play system (M2): playCard intents for all basic/tactic/delayed cards.
-// Strike↔Evade flow with prompt stack; Signal Jam windows on tactics;
-// Standoff & Proxy War sub-games; delayed card placement.
-import {
-  CARD_DEFS,
-  isRed,
-  type CardInstance,
-} from "@ashfall/shared";
+// Card play system (M2/M3/M4): playCard intents for all cards, strike↔evade
+// flow, delayed placement, equipment installation, launcher/railgun specials.
+// Conversion skills are honored everywhere via hooks.canActAs.
+import { CARD_DEFS, isRed, type CardInstance, type EquipmentSlot } from "@ashfall/shared";
 import {
   EngineError,
   ask,
   dealDamage,
   defIdOf,
   discardFromHand,
-  drawCards,
   emit,
-  enterDying,
   flipFate,
   gameEnded,
-  handDefIds,
-  heal,
   jamWindow,
-  nextAlive,
   placeDelayed,
-  turnOrderFrom,
-  type DamageKind,
   type Game,
 } from "./engine.js";
 import { distance, inAttackRange } from "./distance.js";
+import {
+  resolveFieldClinic,
+  resolveMortarRain,
+  resolveMutantHorde,
+  resolveStandoff,
+  resolveSupplyDrop,
+} from "./effects.js";
+import {
+  hooks,
+  canActAs as canActAsPure,
+  deadeyeForbidsEvade,
+  evadesRequiredFor,
+  canSaveWith,
+} from "./hooks.js";
+import { kaanFateGate, removeEquipment } from "./skills.js";
 
 export interface PlayCardRequest {
   playerId: string;
   cardId: string;
   targets?: string[];
+  /** play AS another defId via a conversion skill (red→strike etc.) */
+  asDefId?: string;
 }
 
-/** Validate + execute a play-phase card intent (or a response-phase card via respond()). */
+export function canActAs(game: Game, playerId: string, cardId: string, asDefId: string): boolean {
+  const inst = game.cards.get(cardId);
+  if (!inst) return false;
+  return canActAsPure(game.state.players[playerId]?.survivorId, inst, asDefId);
+}
+
+/** Validate + execute a play-phase card intent. */
 export function playCard(game: Game, req: PlayCardRequest): void {
   const { state } = game;
   if (gameEnded(game)) throw new EngineError("E_GAME_OVER", "game ended");
@@ -48,10 +60,14 @@ export function playCard(game: Game, req: PlayCardRequest): void {
   if (!p.hand.includes(req.cardId)) throw new EngineError("E_NOT_IN_HAND", "card not in hand");
 
   const inst = game.cards.get(req.cardId)!;
-  const def = CARD_DEFS[inst.defId]!;
   const targets = req.targets ?? [];
 
-  switch (inst.defId) {
+  const effectiveDefId = req.asDefId ?? inst.defId;
+  if (effectiveDefId !== inst.defId && !canActAs(game, req.playerId, req.cardId, effectiveDefId)) {
+    throw new EngineError("E_NO_CONVERSION", "this survivor cannot convert that card");
+  }
+
+  switch (effectiveDefId) {
     // --- basic ---
     case "strike":
       playStrike(game, req.playerId, req.cardId, targets[0]);
@@ -70,57 +86,60 @@ export function playCard(game: Game, req: PlayCardRequest): void {
       requireTarget(game, targets, 1);
       requireWithinDistance(game, req.playerId, targets[0]!, 1);
       requireNotGhost(game, targets[0]!);
-      playWithJam(game, req.playerId, req.cardId, inst.defId, targets, () =>
+      playWithJam(game, req.playerId, req.cardId, effectiveDefId, targets, () =>
         resolveScavenge(game, req.playerId, targets[0]!),
       );
       return;
     case "sabotage":
       requireTarget(game, targets, 1);
       requireNotGhost(game, targets[0]!);
-      playWithJam(game, req.playerId, req.cardId, inst.defId, targets, () =>
-        resolveSabotage(game, req.playerId, req.cardId, targets[0]!),
+      playWithJam(game, req.playerId, req.cardId, effectiveDefId, targets, () =>
+        resolveSabotage(game, req.playerId, targets[0]!),
       );
       return;
     case "proxy_war":
       requireTarget(game, targets, 2);
-      playWithJam(game, req.playerId, req.cardId, inst.defId, targets, () =>
+      playWithJam(game, req.playerId, req.cardId, effectiveDefId, targets, () =>
         resolveProxyWar(game, req.playerId, targets[0]!, targets[1]!),
       );
       return;
     case "standoff":
       requireTarget(game, targets, 1);
       requireNotGhost(game, targets[0]!);
-      playWithJam(game, req.playerId, req.cardId, inst.defId, targets, () =>
-        resolveStandoff(game, req.playerId, req.playerId, targets[0]!),
+      playWithJam(game, req.playerId, req.cardId, effectiveDefId, targets, () =>
+        resolveStandoff(game, req.playerId, targets[0]!),
       );
       return;
     case "supply_drop":
-      playWithJam(game, req.playerId, req.cardId, inst.defId, targets, () =>
+      playWithJam(game, req.playerId, req.cardId, effectiveDefId, targets, () =>
         resolveSupplyDrop(game, req.playerId),
       );
       return;
     case "mortar_rain":
-      playWithJam(game, req.playerId, req.cardId, inst.defId, targets, () =>
+      playWithJam(game, req.playerId, req.cardId, effectiveDefId, targets, () =>
         resolveMortarRain(game, req.playerId, "mortar"),
       );
       return;
     case "mutant_horde":
-      playWithJam(game, req.playerId, req.cardId, inst.defId, targets, () =>
+      playWithJam(game, req.playerId, req.cardId, effectiveDefId, targets, () =>
         resolveMutantHorde(game, req.playerId),
       );
       return;
     case "field_clinic":
-      playWithJam(game, req.playerId, req.cardId, inst.defId, targets, () =>
+      playWithJam(game, req.playerId, req.cardId, effectiveDefId, targets, () =>
         resolveFieldClinic(game, req.playerId),
       );
       return;
     case "signal_jam":
       throw new EngineError("E_RESPONSE_ONLY", "signal jam is only played in response");
 
-    // --- delayed tactics (placed on a player, jam-able) ---
+    // --- delayed tactics (jam-able) ---
     case "ion_storm":
-      // no duplicate rule: only one Ion Storm in play at a time (standard)
-      if (Object.values(game.state.players).some((pl) => pl.alive && pl.delayed.some((d) => d.defId === "ion_storm"))) {
+      if (
+        Object.values(game.state.players).some(
+          (pl) => pl.alive && pl.delayed.some((d) => d.defId === "ion_storm"),
+        )
+      ) {
         throw new EngineError("E_DUP_DELAYED", "an ion storm is already in play");
       }
       playDelayed(game, req.playerId, req.cardId, "ion_storm", req.playerId, targets);
@@ -128,14 +147,16 @@ export function playCard(game: Game, req: PlayCardRequest): void {
     case "ration_cut":
       requireTarget(game, targets, 1);
       requireWithinDistance(game, req.playerId, targets[0]!, 1);
+      requireNoAshwalk(game, targets[0]!, "ration_cut");
       playDelayed(game, req.playerId, req.cardId, "ration_cut", targets[0]!, targets);
       return;
     case "lockdown":
       requireTarget(game, targets, 1);
+      requireNoAshwalk(game, targets[0]!, "lockdown");
       playDelayed(game, req.playerId, req.cardId, "lockdown", targets[0]!, targets);
       return;
 
-    // --- equipment (M3) ---
+    // --- equipment ---
     case "auto_rifle":
     case "plasma_cutter":
     case "scrap_launcher":
@@ -148,7 +169,7 @@ export function playCard(game: Game, req: PlayCardRequest): void {
       return;
 
     default:
-      throw new EngineError("E_UNKNOWN_CARD", `unhandled card: ${inst.defId}`);
+      throw new EngineError("E_UNKNOWN_CARD", `unhandled card: ${effectiveDefId}`);
   }
 }
 
@@ -169,7 +190,7 @@ function requireWithinDistance(game: Game, from: string, to: string, range: numb
 }
 
 /** Ghost Signal (Sage Aldric): with 0 hand cards, untargetable by strike/targeted tactics. */
-function isGhostProtected(game: Game, targetId: string): boolean {
+export function isGhostProtected(game: Game, targetId: string): boolean {
   const t = game.state.players[targetId]!;
   return t.survivorId === "sage_aldric" && t.hand.length === 0;
 }
@@ -180,13 +201,20 @@ function requireNotGhost(game: Game, targetId: string): void {
   }
 }
 
+/** Ashwalk (Ember Sage Ryn): immune to Lockdown / Ration Cut. */
+function requireNoAshwalk(game: Game, targetId: string, defId: string): void {
+  if (game.state.players[targetId]!.survivorId === "ember_sage_ryn") {
+    throw new EngineError("E_IMMUNE", `target is immune to ${defId}`);
+  }
+}
+
 /** Consume a card from hand to discard as "played". */
 function consumePlayed(game: Game, playerId: string, cardId: string, defId: string, targets?: string[]): void {
   discardFromHand(game, playerId, [cardId], "played");
   emit(game, { type: "card_played", playerId, cardId, defId, targets });
 }
 
-/** Play an instant tactic: consume card, open jam window, apply effect if it survives. */
+/** Play an instant tactic: consume card, open jam window, apply if it survives. */
 function playWithJam(
   game: Game,
   playerId: string,
@@ -199,13 +227,22 @@ function playWithJam(
   jamWindow(game, {
     description: { defId, sourceId: playerId, targetIds: targets },
     onApply: apply,
-    onCancel: () => {
-      /* card already in discard; effect fizzles */
-    },
+    onCancel: () => {},
   });
 }
 
 // --- Strike flow ------------------------------------------------------------
+
+/** Strike limit: base 1; Auto-Rifle & War Bellow lift it. */
+export function strikeLimit(game: Game, playerId: string): number {
+  const p = game.state.players[playerId]!;
+  if (p.survivorId === "grog_thunderlung") return Infinity; // War Bellow
+  if (p.equipment.weapon) {
+    const w = game.cards.get(p.equipment.weapon)!;
+    if (w.defId === "auto_rifle") return Infinity;
+  }
+  return 1;
+}
 
 export function playStrike(game: Game, playerId: string, cardId: string, targetId?: string): void {
   const p = game.state.players[playerId]!;
@@ -214,10 +251,7 @@ export function playStrike(game: Game, playerId: string, cardId: string, targetI
   if (!target || !target.alive || targetId === playerId) {
     throw new EngineError("E_BAD_TARGETS", "invalid strike target");
   }
-  if (isGhostProtected(game, targetId)) {
-    throw new EngineError("E_GHOST_SIGNAL", "target is untargetable (empty hand)");
-  }
-  // strike limit: 1/turn (M4 skills & M3 Auto-Rifle lift it)
+  requireNotGhost(game, targetId);
   if (p.strikeCountThisTurn >= strikeLimit(game, playerId)) {
     throw new EngineError("E_STRIKE_LIMIT", "strike limit reached this turn");
   }
@@ -230,32 +264,77 @@ export function playStrike(game: Game, playerId: string, cardId: string, targetI
   p.buffs.chemBrewNext = false;
   consumePlayed(game, playerId, cardId, "strike", [targetId]);
 
-  // Holo-Barrier: free fate check first — red counts as an evaded strike
-  const armorId = target.equipment.armor;
-  const armorDef = armorId ? CARD_DEFS[game.cards.get(armorId)!.defId] : undefined;
-  const plasmaAttacker =
-    p.equipment.weapon != null &&
-    game.cards.get(p.equipment.weapon)!.defId === "plasma_cutter";
-  if (armorDef?.defId === "holo_barrier" && !plasmaAttacker) {
-    const fate = flipFate(game, { forPlayerId: targetId, outcome: "holo_barrier" });
-    if (isRed(fate.suit)) {
-      return; // barrier dodged the strike
+  // Kaan Iron Charge: fate gate first (non-heart → target cannot evade)
+  kaanFateGate(game, playerId, targetId, (kaanForbids) => {
+    if (gameEnded(game)) return;
+
+    // Holo-Barrier: free fate check — red counts as an evaded strike
+    const armorId = target.equipment.armor;
+    const armorDef = armorId ? CARD_DEFS[game.cards.get(armorId)!.defId] : undefined;
+    const plasmaAttacker =
+      p.equipment.weapon != null &&
+      game.cards.get(p.equipment.weapon)!.defId === "plasma_cutter";
+
+    const proceedToEvade = (): void => {
+      openEvadeWindow(game, playerId, targetId, cardId, amount, {
+        railgun: true,
+        forbidden: kaanForbids,
+      });
+    };
+
+    if (armorDef?.defId === "holo_barrier" && !plasmaAttacker) {
+      flipFate(game, { forPlayerId: targetId, outcome: "holo_barrier" }, (fate) => {
+        if (gameEnded(game)) return;
+        if (isRed(fate.suit)) return; // barrier dodged
+        proceedToEvade();
+      });
+    } else {
+      proceedToEvade();
     }
+  });
+}
+
+/** Shared evade window for strike-class damage. Skill-aware:
+ *  Kaan forbidden flag, Hale Deadeye, Karn double-evade, Wraith conversions. */
+export function openEvadeWindow(
+  game: Game,
+  attackerId: string,
+  targetId: string,
+  cardId: string | undefined,
+  amount: number,
+  opts: { railgun?: boolean; forbidden?: boolean } = {},
+): void {
+  const attacker = game.state.players[attackerId]!;
+  const target = game.state.players[targetId]!;
+  if (!target.alive) return;
+
+  const forbidden =
+    opts.forbidden === true || deadeyeForbidsEvade(attacker, target);
+  if (forbidden) {
+    deliverStrikeDamage(game, attackerId, targetId, cardId, amount);
+    return;
   }
 
-  // Evade window: target may respond (Lu Bu-style 2-evade skills hook in M4)
-  const evadeRequired = 1;
+  const required = evadesRequiredFor(attacker.survivorId);
+  const canEvade = target.hand.some((c) => canActAs(game, targetId, c, "evade"));
+  if (!canEvade) {
+    deliverStrikeDamage(game, attackerId, targetId, cardId, amount);
+    return;
+  }
+
   ask(game, {
     playerId: targetId,
     kind: "discard_evade",
-    context: { sourceId: playerId, cardId, required: evadeRequired },
+    context: { sourceId: attackerId, cardId, required },
     validate: (action) => {
       if (action.kind === "decline") return null;
       if (action.kind !== "discard") return "E_BAD_ACTION";
       const ok =
-        action.cardIds.length === evadeRequired &&
+        action.cardIds.length === required &&
+        new Set(action.cardIds).size === required &&
         action.cardIds.every(
-          (c) => game.state.players[targetId]!.hand.includes(c) && defIdOf(game, c) === "evade",
+          (c) =>
+            game.state.players[targetId]!.hand.includes(c) && canActAs(game, targetId, c, "evade"),
         );
       return ok ? null : "E_BAD_EVADE";
     },
@@ -263,25 +342,38 @@ export function playStrike(game: Game, playerId: string, cardId: string, targetI
       if (gameEnded(game)) return;
       if (action?.kind === "discard") {
         discardFromHand(game, targetId, action.cardIds, "evade");
-        emit(game, { type: "card_played", playerId: targetId, cardId: action.cardIds[0]!, defId: "evade" });
-        // Railgun (Heaven Halberd): strike evaded → may discard 2 to strike another
-        railgunFollowUp(game, playerId, targetId);
+        emit(game, {
+          type: "card_played",
+          playerId: targetId,
+          cardId: action.cardIds[0]!,
+          defId: "evade",
+        });
+        if (opts.railgun) railgunFollowUp(game, attackerId, targetId);
         return;
       }
-      dealDamage(game, {
-        targetId,
-        amount,
-        element: "none",
-        sourcePlayerId: playerId,
-        sourceCardId: cardId,
-        damageKind: "strike",
-      });
+      deliverStrikeDamage(game, attackerId, targetId, cardId, amount);
     },
   });
 }
 
-/** Railgun chain attack: after an evaded strike, its wielder may discard 2 cards
- *  to strike a DIFFERENT target (once per evade, still within their turn). */
+function deliverStrikeDamage(
+  game: Game,
+  attackerId: string,
+  targetId: string,
+  cardId: string | undefined,
+  amount: number,
+): void {
+  dealDamage(game, {
+    targetId,
+    amount,
+    element: "none",
+    sourcePlayerId: attackerId,
+    sourceCardId: cardId,
+    damageKind: "strike",
+  });
+}
+
+/** Railgun: after an evaded strike, may discard 2 to strike a DIFFERENT target. */
 function railgunFollowUp(game: Game, playerId: string, evadedTargetId: string): void {
   const p = game.state.players[playerId]!;
   if (!p.alive) return;
@@ -297,7 +389,6 @@ function railgunFollowUp(game: Game, playerId: string, evadedTargetId: string): 
     validate: (action) => {
       if (action.kind === "decline") return null;
       if (action.kind !== "choose") return "E_BAD_ACTION";
-      // choice = JSON: { cardIds: [c1, c2], targetId }
       try {
         const parsed = JSON.parse(action.choice) as { cardIds: string[]; targetId: string };
         if (!Array.isArray(parsed.cardIds) || parsed.cardIds.length !== 2) return "E_BAD_ACTION";
@@ -320,23 +411,12 @@ function railgunFollowUp(game: Game, playerId: string, evadedTargetId: string): 
       const parsed = JSON.parse(action.choice) as { cardIds: string[]; targetId: string };
       discardFromHand(game, playerId, parsed.cardIds, "railgun_followup");
       const amount = 1 + (game.state.players[playerId]!.buffs.barehideMode ? 1 : 0);
-      strikeEvadeWindow(game, playerId, parsed.targetId, undefined, amount);
+      openEvadeWindow(game, playerId, parsed.targetId, undefined, amount, { railgun: false });
     },
   });
 }
 
-/** Strike limit for a player: base 1; Auto-Rifle (M3) & War Bellow (M4) lift it. */
-export function strikeLimit(game: Game, playerId: string): number {
-  const p = game.state.players[playerId]!;
-  if (p.survivorId === "grog_thunderlung") return Infinity; // War Bellow
-  if (p.equipment.weapon) {
-    const w = game.cards.get(p.equipment.weapon)!;
-    if (w.defId === "auto_rifle") return Infinity;
-  }
-  return 1;
-}
-
-/** Scrap Launcher special: discard 2 hand cards to issue a Strike (once/turn, active). */
+/** Scrap Launcher: discard 2 hand cards to issue a Strike (active, once/turn via strike limit). */
 export function launcherStrike(game: Game, playerId: string, targetId: string): void {
   const { state } = game;
   if (state.currentPlayerId !== playerId) throw new EngineError("E_NOT_YOUR_TURN", "not your turn");
@@ -352,62 +432,35 @@ export function launcherStrike(game: Game, playerId: string, targetId: string): 
   if (p.hand.length < 2) throw new EngineError("E_NOT_ENOUGH_CARDS", "need 2 hand cards");
   const target = state.players[targetId];
   if (!target?.alive || targetId === playerId) throw new EngineError("E_BAD_TARGETS", "invalid target");
-  if (isGhostProtected(game, targetId)) throw new EngineError("E_GHOST_SIGNAL", "target untargetable");
+  requireNotGhost(game, targetId);
   if (!inAttackRange(game.state, playerId, targetId, game.cards)) {
     throw new EngineError("E_OUT_OF_RANGE", "out of range");
   }
 
-  // player chooses which 2 cards via prompt
   ask(game, {
     playerId,
     kind: "choose_hand_card",
     context: { mode: "launcher_cost", count: 2 },
     validate: (action) => {
+      if (action.kind === "decline") return null; // aborted → nothing happens
       if (action.kind !== "discard" || action.cardIds.length !== 2) return "E_BAD_ACTION";
-      const uniq = new Set(action.cardIds);
-      if (uniq.size !== 2) return "E_BAD_ACTION";
+      if (new Set(action.cardIds).size !== 2) return "E_BAD_ACTION";
       return action.cardIds.every((c) => p.hand.includes(c)) ? null : "E_NOT_IN_HAND";
     },
     resume: (action) => {
       if (gameEnded(game)) return;
-      if (action?.kind !== "discard") return; // declined → nothing happens
+      if (action?.kind !== "discard") return;
       p.strikeCountThisTurn++;
       discardFromHand(game, playerId, action.cardIds, "launcher_cost");
-      emit(game, { type: "card_played", playerId, cardId: action.cardIds[0]!, defId: "strike", targets: [targetId] });
-      strikeEvadeWindow(game, playerId, targetId, undefined, 1);
-    },
-  });
-}
-
-/** Shared evade window for strike-class damage (normal strike, launcher, proxy). */
-function strikeEvadeWindow(game: Game, attackerId: string, targetId: string, cardId?: string, amount = 1): void {
-  ask(game, {
-    playerId: targetId,
-    kind: "discard_evade",
-    context: { sourceId: attackerId, cardId, required: 1 },
-    validate: (action) => {
-      if (action.kind === "decline") return null;
-      if (action.kind !== "discard" || action.cardIds.length !== 1) return "E_BAD_ACTION";
-      const c = action.cardIds[0]!;
-      return game.state.players[targetId]!.hand.includes(c) && defIdOf(game, c) === "evade"
-        ? null
-        : "E_BAD_EVADE";
-    },
-    resume: (action) => {
-      if (gameEnded(game)) return;
-      if (action?.kind === "discard") {
-        discardFromHand(game, targetId, action.cardIds, "evade");
-        emit(game, { type: "card_played", playerId: targetId, cardId: action.cardIds[0]!, defId: "evade" });
-        return;
-      }
-      dealDamage(game, {
-        targetId,
-        amount,
-        element: "none",
-        sourcePlayerId: attackerId,
-        sourceCardId: cardId,
-        damageKind: "strike",
+      emit(game, {
+        type: "card_played",
+        playerId,
+        cardId: action.cardIds[0]!,
+        defId: "strike",
+        targets: [targetId],
       });
+      const amount = 1 + (p.buffs.barehideMode ? 1 : 0);
+      openEvadeWindow(game, playerId, targetId, undefined, amount);
     },
   });
 }
@@ -417,10 +470,12 @@ function strikeEvadeWindow(game: Game, attackerId: string, targetId: string, car
 function playStimOwnTurn(game: Game, playerId: string, cardId: string, targetId?: string): void {
   const target = targetId ?? playerId;
   const tp = game.state.players[target];
-  if (!tp || !tp.alive) throw new EngineError("E_BAD_TARGETS", "invalid stim target");
+  if (!tp?.alive) throw new EngineError("E_BAD_TARGETS", "invalid stim target");
   if (tp.hp >= tp.maxHp) throw new EngineError("E_FULL_HP", "target at full HP");
   consumePlayed(game, playerId, cardId, "stim", [target]);
-  heal(game, target, 1, { playerId, cardId });
+  const before = tp.hp;
+  tp.hp = Math.min(tp.maxHp, tp.hp + 1);
+  emit(game, { type: "heal", targetId: target, amount: tp.hp - before, sourcePlayerId: playerId, sourceCardId: cardId });
 }
 
 function playChemBrewOwnTurn(game: Game, playerId: string, cardId: string): void {
@@ -435,23 +490,26 @@ function playChemBrewOwnTurn(game: Game, playerId: string, cardId: string): void
 function resolveScavenge(game: Game, playerId: string, targetId: string): void {
   if (gameEnded(game)) return;
   const t = game.state.players[targetId]!;
-  // ask which zone: hand (random) or an equipment piece
   const zones: string[] = [];
   if (t.hand.length > 0) zones.push("hand");
   for (const slot of ["weapon", "armor", "rig_plus", "rig_minus"] as const) {
     if (t.equipment[slot]) zones.push(slot);
   }
-  if (zones.length === 0) return; // nothing to take — effect fizzles
+  if (zones.length === 0) return;
 
   ask(game, {
     playerId,
     kind: "choose",
-    context: { zones, targetId },
-    validate: (action) =>
-      action.kind === "choose" && zones.includes(action.choice) ? null : "E_BAD_CHOICE",
+    context: { mode: "scavenge", zones, targetId },
+    validate: (action) => {
+      if (action.kind === "decline") return null; // timeout → random zone
+      return action.kind === "choose" && zones.includes(action.choice) ? null : "E_BAD_CHOICE";
+    },
     resume: (action) => {
       if (gameEnded(game)) return;
-      const zone = action?.kind === "choose" ? action.choice : game.rng.pick(zones);
+      const zone = (action?.kind === "choose" ? action.choice : game.rng.pick(zones)) as
+        | "hand"
+        | EquipmentSlot;
       if (zone === "hand") {
         if (t.hand.length === 0) return;
         const stolen = game.rng.pick(t.hand);
@@ -459,22 +517,17 @@ function resolveScavenge(game: Game, playerId: string, targetId: string): void {
         game.state.players[playerId]!.hand.push(stolen);
         emit(game, { type: "card_discarded", playerId: targetId, cardId: stolen, reason: "scavenged" });
       } else {
-        const cardId = t.equipment[zone as keyof typeof t.equipment]!;
-        delete t.equipment[zone as keyof typeof t.equipment];
-        game.state.players[playerId]!.hand.push(cardId);
-        emit(game, {
-          type: "equipment_removed",
-          playerId: targetId,
-          cardId,
-          slot: zone,
-          reason: "scavenged",
-        });
+        removeEquipment(game, targetId, zone, "scavenged");
+        // scavenged equipment goes to the taker's HAND (manual: take installed card)
+        const dIdx = game.state.discard.length - 1;
+        const moved = game.state.discard.splice(dIdx, 1)[0]!;
+        game.state.players[playerId]!.hand.push(moved);
       }
     },
   });
 }
 
-function resolveSabotage(game: Game, playerId: string, sourceCardId: string, targetId: string): void {
+function resolveSabotage(game: Game, playerId: string, targetId: string): void {
   if (gameEnded(game)) return;
   const t = game.state.players[targetId]!;
   const zones: string[] = [];
@@ -488,13 +541,16 @@ function resolveSabotage(game: Game, playerId: string, sourceCardId: string, tar
   ask(game, {
     playerId,
     kind: "choose",
-    context: { zones, targetId },
-    validate: (action) =>
-      action.kind === "choose" && zones.includes(action.choice) ? null : "E_BAD_CHOICE",
+    context: { mode: "sabotage", zones, targetId },
+    validate: (action) => {
+      if (action.kind === "decline") return null; // timeout → random zone
+      return action.kind === "choose" && zones.includes(action.choice) ? null : "E_BAD_CHOICE";
+    },
     resume: (action) => {
       if (gameEnded(game)) return;
       const zone = action?.kind === "choose" ? action.choice : game.rng.pick(zones);
       if (zone === "hand") {
+        if (t.hand.length === 0) return;
         const destroyed = game.rng.pick(t.hand);
         discardFromHand(game, targetId, [destroyed], "sabotaged");
       } else if (zone.startsWith("delayed:")) {
@@ -506,74 +562,10 @@ function resolveSabotage(game: Game, playerId: string, sourceCardId: string, tar
           emit(game, { type: "card_discarded", playerId: targetId, cardId, reason: "sabotaged_delayed" });
         }
       } else {
-        const cardId = t.equipment[zone as keyof typeof t.equipment]!;
-        delete t.equipment[zone as keyof typeof t.equipment];
-        game.state.discard.push(cardId);
-        emit(game, {
-          type: "equipment_removed",
-          playerId: targetId,
-          cardId,
-          slot: zone,
-          reason: "sabotaged",
-        });
+        removeEquipment(game, targetId, zone as EquipmentSlot, "sabotaged");
       }
     },
   });
-}
-
-/** Standoff (Duel): challenger vs target alternate discarding Strikes.
- *  Challenger discards first (manual: ผู้เล่น 2 คนดวลการ์ดโจมตีกัน ใครไม่มีการ์ดทิ้งก่อน เสีย 1 HP). */
-export function resolveStandoff(
-  game: Game,
-  initiatorId: string,
-  challengerId: string,
-  defenderId: string,
-  bonusDamage = 0,
-): void {
-  let current = challengerId;
-  const other = (id: string) => (id === challengerId ? defenderId : challengerId);
-
-  const step = (): void => {
-    if (gameEnded(game)) return;
-    const aliveCur = game.state.players[current]!;
-    const aliveOther = game.state.players[other(current)]!;
-    if (!aliveCur.alive || !aliveOther.alive) return; // duel over via death
-
-    const strikeCards = aliveCur.hand.filter((c) => defIdOf(game, c) === "strike");
-    ask(game, {
-      playerId: current,
-      kind: "discard_strike",
-      context: { standoffWith: other(current) },
-      validate: (action) => {
-        if (action.kind === "decline") return null;
-        if (action.kind !== "discard" || action.cardIds.length !== 1) return "E_BAD_ACTION";
-        const c = action.cardIds[0]!;
-        return aliveCur.hand.includes(c) && defIdOf(game, c) === "strike" ? null : "E_NOT_STRIKE";
-      },
-      resume: (action) => {
-        if (gameEnded(game)) return;
-        if (action?.kind === "discard") {
-          discardFromHand(game, current, action.cardIds, "standoff");
-          current = other(current);
-          step();
-        } else {
-          // current player can't/won't → takes 1 (+bonus) damage from the other
-          const amount = 1 + bonusDamage;
-          dealDamage(game, {
-            targetId: current,
-            amount,
-            element: "none",
-            sourcePlayerId: other(current),
-            damageKind: "standoff",
-          });
-        }
-      },
-    });
-  };
-
-  step();
-  // initiator only used for logging context
-  void initiatorId;
 }
 
 function resolveProxyWar(game: Game, playerId: string, aId: string, bId: string): void {
@@ -581,13 +573,10 @@ function resolveProxyWar(game: Game, playerId: string, aId: string, bId: string)
   const a = game.state.players[aId]!;
   const b = game.state.players[bId]!;
   if (!a.alive || !b.alive || aId === bId) return;
-  if (!a.equipment.weapon) throw new EngineError("E_BAD_TARGETS", "proxy A has no weapon");
-  if (!inAttackRange(game.state, aId, bId, game.cards)) {
-    throw new EngineError("E_OUT_OF_RANGE", "B not in A's attack range");
-  }
-  if (isGhostProtected(game, bId)) return; // effect fizzles
+  if (!a.equipment.weapon) return; // fizzles without a weapon (card already spent)
+  if (!inAttackRange(game.state, aId, bId, game.cards)) return;
+  if (isGhostProtected(game, bId)) return;
 
-  const aStrikes = a.hand.filter((c) => defIdOf(game, c) === "strike");
   ask(game, {
     playerId: aId,
     kind: "proxy_war",
@@ -596,231 +585,29 @@ function resolveProxyWar(game: Game, playerId: string, aId: string, bId: string)
       if (action.kind === "decline") return null;
       if (action.kind !== "discard" || action.cardIds.length !== 1) return "E_BAD_ACTION";
       const c = action.cardIds[0]!;
-      return a.hand.includes(c) && defIdOf(game, c) === "strike" ? null : "E_NOT_STRIKE";
+      return a.hand.includes(c) && canActAs(game, aId, c, "strike") ? null : "E_NOT_STRIKE";
     },
     resume: (action) => {
       if (gameEnded(game)) return;
       if (action?.kind === "discard") {
-        // A strikes B (through the normal evade flow)
         discardFromHand(game, aId, action.cardIds, "proxy_war");
-        emit(game, { type: "card_played", playerId: aId, cardId: action.cardIds[0]!, defId: "strike", targets: [bId] });
-        proxyStrikeEvadeWindow(game, aId, bId, action.cardIds[0]!);
-      } else {
-        // A refuses → initiator takes A's weapon
-        const weaponId = a.equipment.weapon!;
-        delete a.equipment.weapon;
-        game.state.players[playerId]!.hand.push(weaponId);
         emit(game, {
-          type: "equipment_removed",
+          type: "card_played",
           playerId: aId,
-          cardId: weaponId,
-          slot: "weapon",
-          reason: "proxy_war_refused",
+          cardId: action.cardIds[0]!,
+          defId: "strike",
+          targets: [bId],
         });
+        openEvadeWindow(game, aId, bId, action.cardIds[0], 1, { railgun: false });
+      } else {
+        // refuses → initiator takes A's weapon
+        removeEquipment(game, aId, "weapon", "proxy_war_refused");
+        const dIdx = game.state.discard.length - 1;
+        const moved = game.state.discard.splice(dIdx, 1)[0]!;
+        game.state.players[playerId]!.hand.push(moved);
       }
     },
   });
-  void aStrikes;
-}
-
-/** Strike issued by Proxy War: same evade window, damage attributed to A. */
-function proxyStrikeEvadeWindow(game: Game, aId: string, bId: string, cardId: string): void {
-  ask(game, {
-    playerId: bId,
-    kind: "discard_evade",
-    context: { sourceId: aId, cardId, required: 1, viaProxy: true },
-    validate: (action) => {
-      if (action.kind === "decline") return null;
-      if (action.kind !== "discard" || action.cardIds.length !== 1) return "E_BAD_ACTION";
-      const c = action.cardIds[0]!;
-      return game.state.players[bId]!.hand.includes(c) && defIdOf(game, c) === "evade"
-        ? null
-        : "E_BAD_EVADE";
-    },
-    resume: (action) => {
-      if (gameEnded(game)) return;
-      if (action?.kind === "discard") {
-        discardFromHand(game, bId, action.cardIds, "evade");
-        return;
-      }
-      dealDamage(game, {
-        targetId: bId,
-        amount: 1,
-        element: "none",
-        sourcePlayerId: aId,
-        sourceCardId: cardId,
-        damageKind: "strike",
-      });
-    },
-  });
-}
-
-function resolveSupplyDrop(game: Game, playerId: string): void {
-  if (gameEnded(game)) return;
-  const alive = Object.values(game.state.players).filter((p) => p.alive);
-  const n = alive.length;
-  // reveal n cards from the deck
-  const revealed: string[] = [];
-  for (let i = 0; i < n; i++) {
-    if (game.state.deck.length === 0) {
-      if (game.state.discard.length === 0) break;
-      game.state.deck = game.rng.shuffle(game.state.discard.splice(0, game.state.discard.length));
-      emit(game, { type: "reshuffle" });
-    }
-    revealed.push(game.state.deck.pop()!);
-  }
-  game.revealed = revealed;
-
-  const order = turnOrderFrom(game, playerId).filter((id) => revealed.length > 0);
-  let pickIdx = 0;
-
-  const step = (): void => {
-    if (gameEnded(game) || game.revealed.length === 0) {
-      // leftover revealed cards → discard
-      game.state.discard.push(...game.revealed.splice(0));
-      return;
-    }
-    while (pickIdx < order.length && !game.state.players[order[pickIdx]!]!.alive) pickIdx++;
-    if (pickIdx >= order.length) {
-      game.state.discard.push(...game.revealed.splice(0));
-      return;
-    }
-    const pid = order[pickIdx++]!;
-    const options = [...game.revealed];
-    ask(game, {
-      playerId: pid,
-      kind: "supply_pick",
-      context: { options },
-      validate: (action) =>
-        action.kind === "choose" && game.revealed.includes(action.choice) ? null : "E_BAD_CHOICE",
-      resume: (action) => {
-        if (gameEnded(game)) return;
-        const chosen =
-          action?.kind === "choose" ? action.choice : game.rng.pick(game.revealed);
-        const idx = game.revealed.indexOf(chosen);
-        if (idx >= 0) {
-          game.revealed.splice(idx, 1);
-          game.state.players[pid]!.hand.push(chosen);
-          emit(game, { type: "cards_drawn", playerId: pid, count: 1 });
-        }
-        step();
-      },
-    });
-  };
-
-  step();
-}
-
-function resolveMortarRain(game: Game, playerId: string, kind: DamageKind): void {
-  const others = turnOrderFrom(game, playerId).filter((id) => id !== playerId);
-  let idx = 0;
-  const step = (): void => {
-    if (gameEnded(game)) return;
-    while (idx < others.length && !game.state.players[others[idx]!]!.alive) idx++;
-    if (idx >= others.length) return;
-    const tid = others[idx++]!;
-    const hasEvade = handDefIds(game, tid).includes("evade");
-    if (!hasEvade) {
-      dealDamage(game, {
-        targetId: tid,
-        amount: 1,
-        element: "none",
-        sourcePlayerId: playerId,
-        damageKind: kind,
-      });
-      step();
-      return;
-    }
-    ask(game, {
-      playerId: tid,
-      kind: "discard_evade",
-      context: { via: "mortar_rain", sourceId: playerId },
-      validate: (action) => {
-        if (action.kind === "decline") return null;
-        if (action.kind !== "discard" || action.cardIds.length !== 1) return "E_BAD_ACTION";
-        const c = action.cardIds[0]!;
-        return game.state.players[tid]!.hand.includes(c) && defIdOf(game, c) === "evade"
-          ? null
-          : "E_BAD_EVADE";
-      },
-      resume: (action) => {
-        if (gameEnded(game)) return;
-        if (action?.kind === "discard") {
-          discardFromHand(game, tid, action.cardIds, "mortar_evade");
-        } else {
-          dealDamage(game, {
-            targetId: tid,
-            amount: 1,
-            element: "none",
-            sourcePlayerId: playerId,
-            damageKind: kind,
-          });
-        }
-        step();
-      },
-    });
-  };
-  step();
-}
-
-function resolveMutantHorde(game: Game, playerId: string): void {
-  const others = turnOrderFrom(game, playerId).filter((id) => id !== playerId);
-  let idx = 0;
-  const step = (): void => {
-    if (gameEnded(game)) return;
-    while (idx < others.length && !game.state.players[others[idx]!]!.alive) idx++;
-    if (idx >= others.length) return;
-    const tid = others[idx++]!;
-    const hasStrike = handDefIds(game, tid).includes("strike");
-    if (!hasStrike) {
-      dealDamage(game, {
-        targetId: tid,
-        amount: 1,
-        element: "none",
-        sourcePlayerId: playerId,
-        damageKind: "horde",
-      });
-      step();
-      return;
-    }
-    ask(game, {
-      playerId: tid,
-      kind: "discard_strike",
-      context: { via: "mutant_horde", sourceId: playerId },
-      validate: (action) => {
-        if (action.kind === "decline") return null;
-        if (action.kind !== "discard" || action.cardIds.length !== 1) return "E_BAD_ACTION";
-        const c = action.cardIds[0]!;
-        return game.state.players[tid]!.hand.includes(c) && defIdOf(game, c) === "strike"
-          ? null
-          : "E_NOT_STRIKE";
-      },
-      resume: (action) => {
-        if (gameEnded(game)) return;
-        if (action?.kind === "discard") {
-          discardFromHand(game, tid, action.cardIds, "horde_discard");
-        } else {
-          dealDamage(game, {
-            targetId: tid,
-            amount: 1,
-            element: "none",
-            sourcePlayerId: playerId,
-            damageKind: "horde",
-          });
-        }
-        step();
-      },
-    });
-  };
-  step();
-}
-
-function resolveFieldClinic(game: Game, playerId: string): void {
-  for (const p of Object.values(game.state.players)) {
-    if (p.alive && p.hp < p.maxHp) {
-      heal(game, p.id, 1, { playerId });
-    }
-  }
 }
 
 // --- Delayed card placement ---------------------------------------------------
@@ -834,24 +621,21 @@ function playDelayed(
   targets: string[],
 ): void {
   const t = game.state.players[targetId]!;
-  // Ashwalk (Lu Xun) immunity: cannot be targeted by lockdown/ration_cut
   if (t.survivorId === "ember_sage_ryn" && defId !== "ion_storm") {
     throw new EngineError("E_IMMUNE", "target is immune to this delayed card");
   }
-  // no duplicate defId on the same player (standard Sanguosha rule)
   if (t.delayed.some((d) => d.defId === defId)) {
     throw new EngineError("E_DUP_DELAYED", "target already has that delayed card");
   }
-  if (isGhostProtected(game, targetId) && defId !== "ion_storm") {
+  if (isGhostProtected(game, targetId)) {
     throw new EngineError("E_GHOST_SIGNAL", "target untargetable (empty hand)");
   }
 
-  // card leaves hand now; placement happens if the jam window survives
+  // card leaves hand; placement happens only if the jam window survives
   discardFromHand(game, playerId, [cardId], "played_delayed");
   emit(game, { type: "card_played", playerId, cardId, defId, targets });
-  // remove from discard — it goes onto the table when placed
   const dIdx = game.state.discard.indexOf(cardId);
-  if (dIdx >= 0) game.state.discard.splice(dIdx, 1);
+  if (dIdx >= 0) game.state.discard.splice(dIdx, 1); // table zone, not discard
 
   jamWindow(game, {
     description: { defId, sourceId: playerId, targetIds: [targetId] },
@@ -863,38 +647,38 @@ function playDelayed(
       placeDelayed(game, targetId, cardId, defId, playerId);
     },
     onCancel: () => {
-      game.state.discard.push(cardId); // jammed → discard
+      game.state.discard.push(cardId);
     },
   });
 }
 
-// --- Equipment installation (M3) ---------------------------------------------
+// --- Equipment installation ----------------------------------------------------
 
 export function installEquipment(game: Game, playerId: string, cardId: string, inst: CardInstance): void {
   const def = CARD_DEFS[inst.defId]!;
   const slot = def.subtype!;
   const p = game.state.players[playerId]!;
 
-  // hand → equipment slot directly (never through discard — conservation!)
+  // hand → slot directly (never through discard — conservation)
   const idx = p.hand.indexOf(cardId);
   if (idx < 0) throw new EngineError("E_NOT_IN_HAND", "card not in hand");
   p.hand.splice(idx, 1);
   emit(game, { type: "card_played", playerId, cardId, defId: inst.defId });
 
-  const old = p.equipment[slot as keyof typeof p.equipment];
+  const old = p.equipment[slot];
   if (old) {
+    // replace: old goes to discard (Salvage triggers for Vesper)
+    delete p.equipment[slot];
     game.state.discard.push(old);
-    emit(game, {
-      type: "equipment_replaced",
-      playerId,
-      oldCardId: old,
-      newCardId: cardId,
-      slot,
-    });
+    emit(game, { type: "equipment_replaced", playerId, oldCardId: old, newCardId: cardId, slot });
+    hooks.onEquipmentLost?.(game, playerId, old, slot, "replaced");
   } else {
     emit(game, { type: "equipment_installed", playerId, cardId, slot });
   }
-  p.equipment[slot as keyof typeof p.equipment] = cardId;
+  p.equipment[slot] = cardId;
+  if (p.hand.length === 0) {
+    hooks.onHandEmpty?.(game, playerId);
+  }
 }
 
-export { isGhostProtected, isRed, nextAlive, enterDying, flipFate };
+export { defIdOf, canSaveWith };

@@ -1,4 +1,5 @@
-// Engine public API — grows through M1..M4.
+// Engine public API. Importing this module also loads skills.ts, which
+// registers the passive hooks at module load (side effect by design).
 export type {
   CardInstance,
   GameState,
@@ -57,8 +58,29 @@ export {
   playCard,
   installEquipment,
   playStrike,
+  openEvadeWindow,
   strikeLimit,
   launcherStrike,
-  resolveStandoff,
+  isGhostProtected,
+  canActAs,
   type PlayCardRequest,
 } from "./cards.js";
+export {
+  resolveStandoff,
+  resolveMortarRain,
+  resolveMutantHorde,
+  resolveFieldClinic,
+  resolveSupplyDrop,
+} from "./effects.js";
+export { hooks } from "./hooks.js";
+export {
+  useSkill,
+  canUseSkillNow,
+  ACTIVE_SKILLS,
+  removeEquipment,
+  kaanFateGate,
+  evadesRequired,
+  evadeForbidden,
+  type ActiveSkillId,
+  type UseSkillRequest,
+} from "./skills.js";

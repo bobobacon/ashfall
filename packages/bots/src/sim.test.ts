@@ -17,7 +17,7 @@ describe("E-01: 1000 bot-vs-bot games", () => {
         name: `Bot ${j}`,
         isBot: true,
       }));
-      results.push(playRandomGame({ roomId: `sim${i}`, seed, players }));
+      results.push(playRandomGame({ roomId: `sim${i}`, seed, players }, 1500));
     }
 
     const crashed = results.filter((r) => r.crashed);

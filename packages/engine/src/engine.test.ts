@@ -30,6 +30,20 @@ function finishDraft(game: Game): void {
   for (const p of Object.values(game.state.players)) {
     autoPick(game, p.id);
   }
+  settle(game);
+}
+
+/** Drain non-critical prompts (draw-skill choice, fate hack, reorder) by declining. */
+function settle(game: Game): void {
+  let guard = 0;
+  while (game.state.pendingPrompts.length > 0 && guard++ < 50) {
+    const pr = game.state.pendingPrompts[0]!;
+    if (pr.context.mode === "draw_skill_choice" || pr.kind === "fate_hack" || pr.kind === "reorder_deck") {
+      respond(game, pr.playerId, pr.id, { kind: "decline" });
+    } else {
+      break;
+    }
+  }
 }
 
 describe("A1 setup & roles", () => {
@@ -140,8 +154,11 @@ describe("A1-09 determinism", () => {
       const game = createGame({ roomId: "det", seed: 2026, players: makePlayers(5) });
       finishDraft(game);
       for (let i = 0; i < 10; i++) {
+        settle(game);
+        if (game.state.phase !== "playing") break;
         endTurn(game, game.state.currentPlayerId!);
       }
+      settle(game);
       return game.log.events.map((e) => JSON.stringify(e)).join("\n");
     };
     expect(run()).toBe(run());
@@ -172,8 +189,10 @@ describe("A2 turn phases", () => {
     const game = startedGame();
     const order = [...game.state.turnOrder];
     endTurn(game, order[0]!);
+    settle(game);
     expect(game.state.currentPlayerId).toBe(order[1]);
     endTurn(game, order[1]!);
+    settle(game);
     expect(game.state.currentPlayerId).toBe(order[2]);
   });
 
@@ -198,6 +217,7 @@ describe("A2 turn phases", () => {
       p.hand.push(cardId);
     }
     endTurn(game, cur);
+    settle(game);
     // after discard: hand == hp (no damage taken, hp = maxHp ≥ hand)
     expect(p.hand.length).toBeLessThanOrEqual(p.hp);
   });
@@ -209,6 +229,7 @@ describe("A2 turn phases", () => {
     while (p.hand.length < p.hp + 2) p.hand.push(game.state.deck.pop()!);
     const chosen = p.hand.slice(0, 2);
     endTurn(game, cur, chosen);
+    settle(game);
     for (const c of chosen) expect(p.hand).not.toContain(c);
   });
 
@@ -218,6 +239,7 @@ describe("A2 turn phases", () => {
     const next = order[1]!;
     game.state.players[next]!.flipped = true; // simulate Bunker Down
     endTurn(game, order[0]!);
+    settle(game);
     expect(game.state.currentPlayerId).toBe(order[2]); // skipped next
     expect(game.state.players[next]!.flipped).toBe(false);
   });
@@ -226,6 +248,7 @@ describe("A2 turn phases", () => {
     const game = startedGame();
     const t0 = game.state.turnNumber;
     endTurn(game, game.state.currentPlayerId!);
+    settle(game);
     expect(game.state.turnNumber).toBe(t0 + 1);
   });
 });
@@ -271,7 +294,11 @@ describe("A11 deck integrity", () => {
     expect(countAll()).toBe(108);
     for (let i = 0; i < 60; i++) {
       if (game.state.phase === "ended") break;
+      settle(game);
+      if (game.state.phase !== "playing") break;
+      if (game.pending.size > 0) continue;
       endTurn(game, game.state.currentPlayerId!);
+      settle(game);
       expect(countAll()).toBe(108);
     }
   });
@@ -285,6 +312,7 @@ describe("A11 deck integrity", () => {
     const before = game.state.players[cur]!.hand.length;
     // end turn → next player draws 2 from reshuffled discard
     endTurn(game, cur);
+    settle(game);
     const next = game.state.currentPlayerId!;
     expect(game.state.players[next]!.hand.length).toBeGreaterThanOrEqual(before - 4 + 2);
     const reshuffled = game.log.events.some((e) => e.type === "reshuffle");
@@ -360,6 +388,8 @@ describe("A5/A6 dying, death, win conditions", () => {
     const game = playing();
     const victim = game.state.turnOrder[1]!;
     const p = game.state.players[victim]!;
+    // pin to a survivor with no pre/post-damage passives (isolate the pipeline)
+    p.survivorId = "grog_thunderlung";
     const handBefore = [...p.hand];
     dealDamage(game, { targetId: victim, amount: p.hp, damageKind: "direct" });
     // dying state opens save prompts; decline them all
@@ -379,6 +409,7 @@ describe("A5/A6 dying, death, win conditions", () => {
     const game = playing();
     const victim = game.state.turnOrder[1]!;
     const p = game.state.players[victim]!;
+    p.survivorId = "grog_thunderlung"; // no damage-redirect passives
     // give victim a stim
     const stimCard = game.state.deck.find((c) => game.cards.get(c)!.defId === "stim")!;
     game.state.deck.splice(game.state.deck.indexOf(stimCard), 1);

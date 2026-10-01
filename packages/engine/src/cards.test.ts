@@ -26,7 +26,21 @@ function makePlayers(n: number) {
 function startedGame(n = 5, seed = 101): GameT {
   const game = createGame({ roomId: "m2", seed, players: makePlayers(n) });
   for (const p of Object.values(game.state.players)) autoPick(game, p.id);
+  settle(game);
   return game;
+}
+
+/** Drain non-game-critical prompts (draw-skill choice, fate hack) by declining. */
+function settle(game: GameT): void {
+  let guard = 0;
+  while (game.state.pendingPrompts.length > 0 && guard++ < 50) {
+    const pr = game.state.pendingPrompts[0]!;
+    if (pr.context.mode === "draw_skill_choice" || pr.kind === "fate_hack" || pr.kind === "reorder_deck") {
+      respond(game, pr.playerId, pr.id, { kind: "decline" });
+    } else {
+      break;
+    }
+  }
 }
 
 /** Find a card of a given defId in a player's hand; inject from deck if missing. */
@@ -74,22 +88,20 @@ function nextPlayer(game: GameT, fromId?: string): string {
 }
 
 describe("A2/A4 Strike & Evade", () => {
-  it("strike with no evade → 1 damage (A4-01)", () => {
+  it("strike with no evade → 1 damage, no prompt (A4-01)", () => {
     const game = startedGame();
     const attacker = cur(game);
     const target = nextPlayer(game);
     stripCards(game, target, "evade");
+    // ensure target isn't Wraith (strike↔evade conversion would let them evade)
+    game.state.players[target]!.survivorId = "baron_howl";
     const strike = ensureCard(game, attacker, "strike");
+    const hpBefore = game.state.players[target]!.hp;
 
     playCard(game, { playerId: attacker, cardId: strike, targets: [target] });
-    // evade prompt issued to target
-    expect(game.state.pendingPrompts).toHaveLength(1);
-    expect(game.state.pendingPrompts[0]!.kind).toBe("discard_evade");
-    answerPrompt(game, "decline");
-
-    const hp = game.state.players[target]!.hp;
-    const max = game.state.players[target]!.maxHp;
-    expect(max - hp).toBe(1);
+    // no evade possible → damage applies without prompting
+    expect(game.state.pendingPrompts).toHaveLength(0);
+    expect(game.state.players[target]!.hp).toBe(hpBefore - 1);
   });
 
   it("strike cancelled by evade response (A4-02)", () => {
@@ -112,9 +124,11 @@ describe("A2/A4 Strike & Evade", () => {
     const attacker = cur(game);
     const target = nextPlayer(game);
     stripCards(game, target, "evade");
+    game.state.players[target]!.survivorId = "baron_howl";
+    game.state.players[target]!.hp = 99; // keep alive through both strikes
+    game.state.players[target]!.maxHp = 99;
     const s1 = ensureCard(game, attacker, "strike");
     playCard(game, { playerId: attacker, cardId: s1, targets: [target] });
-    answerPrompt(game, "decline");
 
     const s2 = ensureCard(game, attacker, "strike");
     try {
@@ -501,15 +515,16 @@ describe("equipment install (M3 preview)", () => {
     const user = cur(game);
     const target = nextPlayer(game);
     stripCards(game, target, "evade");
+    game.state.players[target]!.survivorId = "baron_howl";
+    game.state.players[target]!.hp = 99;
+    game.state.players[target]!.maxHp = 99;
     const rifle = ensureCard(game, user, "auto_rifle");
     playCard(game, { playerId: user, cardId: rifle });
 
     const s1 = ensureCard(game, user, "strike");
     playCard(game, { playerId: user, cardId: s1, targets: [target] });
-    answerPrompt(game, "decline");
     const s2 = ensureCard(game, user, "strike");
-    playCard(game, { playerId: user, cardId: s2, targets: [target] });
-    answerPrompt(game, "decline"); // second strike legal
+    playCard(game, { playerId: user, cardId: s2, targets: [target] }); // second strike legal
     expect(game.state.players[user]!.strikeCountThisTurn).toBe(2);
   });
 });

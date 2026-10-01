@@ -44,16 +44,30 @@ function drainPrompts(game: Game, max = 1000): void {
 
     switch (prompt.kind) {
       case "discard_evade": {
+        const required = (prompt.context.required as number | undefined) ?? 1;
         const evades = p.hand.filter((c) => defIdOf(game, c) === "evade");
-        if (evades.length > 0 && flip < 0.7) {
-          action = { kind: "discard", cardIds: [evades[0]!] };
+        // Wraith Phase Step: strikes can act as evades
+        if (p.survivorId === "wraith_white_ghost") {
+          evades.push(...p.hand.filter((c) => defIdOf(game, c) === "strike"));
+        }
+        const unique = [...new Set(evades)];
+        if (unique.length >= required && flip < 0.7) {
+          action = { kind: "discard", cardIds: unique.slice(0, required) };
         }
         break;
       }
       case "discard_strike": {
         const strikes = p.hand.filter((c) => defIdOf(game, c) === "strike");
-        if (strikes.length > 0 && flip < 0.6) {
-          action = { kind: "discard", cardIds: [strikes[0]!] };
+        // Ronan War Saint: red cards act as strikes
+        if (p.survivorId === "ronan_crimson_blade") {
+          strikes.push(...p.hand.filter((c) => {
+            const inst = game.cards.get(c)!;
+            return inst.suit === "heart" || inst.suit === "diamond";
+          }));
+        }
+        const unique = [...new Set(strikes)];
+        if (unique.length > 0 && flip < 0.6) {
+          action = { kind: "discard", cardIds: [unique[0]!] };
         }
         break;
       }
@@ -77,10 +91,22 @@ function drainPrompts(game: Game, max = 1000): void {
       }
       case "choose":
       case "supply_pick": {
-        const zones = (prompt.context.zones as string[] | undefined) ??
-          (prompt.context.options as string[] | undefined);
-        if (zones && zones.length > 0) {
-          action = { kind: "choose", choice: game.rng.pick(zones) };
+        const mode = prompt.context.mode as string | undefined;
+        if (mode === "highwayman_targets") {
+          const opts = prompt.context.options as string[];
+          const n = Math.min(opts.length, flip < 0.5 ? 1 : 2);
+          const picks = game.rng.shuffle(opts).slice(0, n);
+          action = { kind: "choose", choice: JSON.stringify(picks) };
+        } else if (mode === "draw_skill_choice") {
+          const opts = prompt.context.options as string[];
+          // 50/50: use the skill or normal draw
+          action = flip < 0.5 ? { kind: "choose", choice: game.rng.pick(opts) } : { kind: "decline" };
+        } else {
+          const zones = (prompt.context.zones as string[] | undefined) ??
+            (prompt.context.options as string[] | undefined);
+          if (zones && zones.length > 0) {
+            action = { kind: "choose", choice: game.rng.pick(zones) };
+          }
         }
         break;
       }
@@ -229,7 +255,12 @@ function tryRandomPlay(game: Game): boolean {
   }
 
   if (candidates.length === 0) return false;
-  const pick = game.rng.pick(candidates);
+  // prefer strikes 60% of the time so games actually progress toward kills
+  const strikes = candidates.filter((c) => defIdOf(game, c.cardId) === "strike");
+  const pick =
+    strikes.length > 0 && game.rng.next() < 0.6
+      ? game.rng.pick(strikes)
+      : game.rng.pick(candidates);
   playCard(game, { playerId: cur, cardId: pick.cardId, targets: pick.targets });
   drainPrompts(game);
   return true;
@@ -250,26 +281,64 @@ export function playRandomGame(opts: CreateGameOptions, maxTurns = 500): SimResu
     }
     drainPrompts(game);
 
+    let iters = 0;
     while (phaseOf(game) === "playing" && result.turns < maxTurns) {
+      iters++;
+      if (iters > maxTurns * 3) {
+        result.crashed = `iteration cap: stuck at turn ${game.state.turnNumber}, phase=${String(game.state.turnPhase)}, current=${game.state.currentPlayerId}, pending=${game.state.pendingPrompts.map((pr) => `${pr.playerId}:${pr.kind}:${String(pr.context.mode ?? "")}`).join("|")}`;
+        break;
+      }
       const cur = game.state.currentPlayerId!;
-      result.turns = game.state.turnNumber;
+      const turnBefore = game.state.turnNumber;
+      result.turns = turnBefore;
 
-      // play up to 3 random legal cards this turn
+      // play up to 3 random legal cards this turn (play phase only, no pending prompts)
       let plays = 0;
-      while (plays < 3 && phaseOf(game) === "playing" && game.state.currentPlayerId === cur) {
+      while (
+        plays < 3 &&
+        phaseOf(game) === "playing" &&
+        game.state.currentPlayerId === cur &&
+        game.state.turnPhase === "play" &&
+        game.state.pendingPrompts.length === 0
+      ) {
         if (!tryRandomPlay(game)) break;
+        drainPrompts(game);
         plays++;
       }
       if (phaseOf(game) === "ended") break;
       if (game.state.currentPlayerId !== cur) continue; // turn advanced via effects
-
-      endTurn(game, cur);
-      drainPrompts(game);
+      if (game.state.pendingPrompts.length > 0) {
+        drainPrompts(game);
+        if (phaseOf(game) === "ended") break;
+        if (game.state.currentPlayerId !== cur) continue;
+      }
+      if (game.state.turnPhase === "play") {
+        endTurn(game, cur);
+        drainPrompts(game);
+      } else {
+        // still in draw/start phase with prompts — drain again or break to avoid spinning
+        drainPrompts(game);
+        if (game.state.currentPlayerId === cur && game.state.turnPhase !== "play") {
+          result.crashed = `stuck in phase ${String(game.state.turnPhase)} cur=${cur} surv=${String(game.state.players[cur]!.survivorId)} alive=${game.state.players[cur]!.alive} pendingMap=${game.pending.size} aliveAll=${Object.values(game.state.players).filter((x) => x.alive).map((x) => x.id + ":" + String(x.survivorId)).join(",")}`;
+          break;
+        }
+      }
+      // safety: if a full iteration neither advanced the turn nor ended the game,
+      // something is looping — break with diagnostics
+      if (
+        phaseOf(game) === "playing" &&
+        game.state.turnNumber === turnBefore &&
+        game.state.currentPlayerId === cur &&
+        game.state.pendingPrompts.length === 0
+      ) {
+        result.crashed = `no-progress at turn ${turnBefore}, phase=${String(game.state.turnPhase)}`;
+        break;
+      }
     }
 
     if (phaseOf(game) === "ended") {
       result.winner = game.state.winner?.faction;
-    } else {
+    } else if (!result.crashed) {
       result.crashed = `turn cap hit (${maxTurns}) without game end`;
     }
 

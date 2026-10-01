@@ -28,6 +28,7 @@ import {
 import { EventLog, type GameEvent } from "./events.js";
 import { Rng } from "./rng.js";
 import { buildDeck } from "./deck.js";
+import { hooks, canSaveWith } from "./hooks.js";
 
 export class EngineError extends Error {
   constructor(
@@ -311,6 +312,9 @@ export function discardFromHand(game: Game, playerId: string, cardIds: string[],
   } else if (removed.length > 1) {
     emit(game, { type: "cards_discarded", playerId, cardIds: removed, reason });
   }
+  if (removed.length > 0 && p.hand.length === 0 && p.alive) {
+    hooks.onHandEmpty?.(game, playerId);
+  }
 }
 
 export function heal(game: Game, targetId: string, amount: number, src?: { playerId?: string; cardId?: string }): void {
@@ -392,9 +396,14 @@ export function respond(game: Game, playerId: string, promptId: string, action: 
 
   emit(game, { type: "prompt_resolved", promptId, playerId, action: JSON.stringify(action).slice(0, 200) });
   pending.resume(action);
+  // safety net: if the resolution left a dead turn-holder with nothing pending,
+  // advance the turn (covers deaths inside prompt chains)
+  recoverStalledTurn(game);
 }
 
-/** Cancel all pending prompts of a player (e.g. on death) without resuming. */
+/** Cancel all pending prompts of a player (e.g. on death) without resuming.
+ *  Callers MUST follow up with recoverStalledTurn() — a cancelled turn-flow
+ *  prompt (draw_skill_choice etc.) orphans its continuation. */
 export function cancelPromptsFor(game: Game, playerId: string): void {
   for (const [id, pending] of [...game.pending]) {
     if (pending.prompt.playerId === playerId) {
@@ -402,6 +411,19 @@ export function cancelPromptsFor(game: Game, playerId: string): void {
       game.state.pendingPrompts = game.state.pendingPrompts.filter((p) => p.id !== id);
     }
   }
+}
+
+/** Self-heal the turn flow: if the current turn holder is dead and nothing is
+ *  pending, advance to the next player. Covers deaths mid-turn (Blood Debt,
+ *  Misdirect redirects, Ion Storm) where the flow continuation was cancelled
+ *  along with the dead player's prompts. */
+export function recoverStalledTurn(game: Game): void {
+  const { state } = game;
+  if (state.phase !== "playing") return;
+  if (game.pending.size > 0) return;
+  const cur = state.currentPlayerId ? state.players[state.currentPlayerId] : undefined;
+  if (cur && cur.alive) return;
+  beginTurn(game);
 }
 
 // ---------------------------------------------------------------------------
@@ -443,30 +465,52 @@ function beginTurn(game: Game, firstId?: string): void {
   game.turnCtx = { skipDraw: false, skipPlay: false };
   emit(game, { type: "turn_started", playerId: current, turnNumber: state.turnNumber });
 
-  // --- start phase: delayed judgments, most-recent-first (manual §3.1) ---
+  // --- start phase: turnStart skill hook (Drone Scout), then delayed judgments LIFO ---
   state.turnPhase = "start";
   emit(game, { type: "phase_changed", playerId: current, phase: "start" });
-  resolveDelayed(game, current, () => {
-    if (state.phase !== "playing" || state.currentPlayerId !== current) return;
-    // current player may have died to their own Ion Storm → advance turn
-    if (!state.players[current]!.alive) {
-      beginTurn(game);
-      return;
-    }
-    // --- draw phase ---
-    state.turnPhase = "draw";
-    emit(game, { type: "phase_changed", playerId: current, phase: "draw" });
-    if (!game.turnCtx.skipDraw) {
-      drawCards(game, current, 2);
-    }
-    // --- play phase ---
-    state.turnPhase = "play";
-    emit(game, { type: "phase_changed", playerId: current, phase: "play" });
-    if (game.turnCtx.skipPlay) {
-      // Lockdown: play phase skipped → straight to end-of-turn discard
-      forceEndTurn(game, current);
-    }
-  });
+  const afterTurnStart = (): void => {
+    resolveDelayed(game, current, () => {
+      if (state.phase !== "playing" || state.currentPlayerId !== current) return;
+      // current player may have died to their own Ion Storm → advance turn
+      if (!state.players[current]!.alive) {
+        beginTurn(game);
+        return;
+      }
+      // --- draw phase ---
+      state.turnPhase = "draw";
+      emit(game, { type: "phase_changed", playerId: current, phase: "draw" });
+      const doPlayPhase = (): void => {
+        if (state.phase !== "playing" || state.currentPlayerId !== current) return;
+        if (!state.players[current]!.alive) {
+          beginTurn(game);
+          return;
+        }
+        state.turnPhase = "play";
+        emit(game, { type: "phase_changed", playerId: current, phase: "play" });
+        if (game.turnCtx.skipPlay) {
+          forceEndTurn(game, current);
+        }
+      };
+      if (game.turnCtx.skipDraw) {
+        doPlayPhase();
+        return;
+      }
+      // draw phase: modifyDraw hook lets draw-phase skills (Highwayman, Chem
+      // Rage, Ration Share) replace the default 2-card draw when their owner
+      // opts in via useSkill; default path draws 2 immediately.
+      if (hooks.modifyDraw) {
+        hooks.modifyDraw(game, current, doPlayPhase);
+      } else {
+        drawCards(game, current, 2);
+        doPlayPhase();
+      }
+    });
+  };
+  if (hooks.turnStart) {
+    hooks.turnStart(game, current, afterTurnStart);
+  } else {
+    afterTurnStart();
+  }
 }
 
 /** End turn by player intent (with optional chosen discards). */
@@ -476,22 +520,38 @@ export function endTurn(game: Game, playerId: string, chosenDiscards?: string[])
   if (state.currentPlayerId !== playerId) throw new EngineError("E_NOT_YOUR_TURN", "not your turn");
   if (game.pending.size > 0) throw new EngineError("E_PENDING", "responses still pending");
   if (state.turnPhase !== "play") throw new EngineError("E_PHASE", "not in play phase");
-  discardDownToHp(game, playerId, chosenDiscards);
-  emit(game, { type: "turn_ended", playerId });
   state.turnPhase = "end";
   emit(game, { type: "phase_changed", playerId, phase: "end" });
-  beginTurn(game);
+  const finish = (): void => {
+    if (state.phase !== "playing") return;
+    discardDownToHp(game, playerId, chosenDiscards);
+    emit(game, { type: "turn_ended", playerId });
+    beginTurn(game);
+  };
+  if (hooks.turnEnd) {
+    hooks.turnEnd(game, playerId, finish);
+  } else {
+    finish();
+  }
 }
 
 /** Lockdown skip → server-forced end of turn (no intent needed). */
 export function forceEndTurn(game: Game, playerId: string): void {
   const { state } = game;
   if (state.phase !== "playing" || state.currentPlayerId !== playerId) return;
-  discardDownToHp(game, playerId);
-  emit(game, { type: "turn_ended", playerId });
   state.turnPhase = "end";
   emit(game, { type: "phase_changed", playerId, phase: "end" });
-  beginTurn(game);
+  const finish = (): void => {
+    if (state.phase !== "playing") return;
+    discardDownToHp(game, playerId);
+    emit(game, { type: "turn_ended", playerId });
+    beginTurn(game);
+  };
+  if (hooks.turnEnd) {
+    hooks.turnEnd(game, playerId, finish);
+  } else {
+    finish();
+  }
 }
 
 function discardDownToHp(game: Game, playerId: string, chosen?: string[]): void {
@@ -517,8 +577,15 @@ export interface FateResult {
   number: number;
 }
 
-/** Flip the top deck card as the Fate Card; card goes to discard after. */
-export function flipFate(game: Game, ctx: { forCardId?: string; forPlayerId?: string; outcome: string }): FateResult {
+/** Flip the top deck card as the Fate Card; card goes to discard after.
+ *  Continuation-based: the modifyFate hook (Vex Fate Hack) may prompt a player
+ *  to substitute a hand card BEFORE `apply` runs with the effective result.
+ *  apply is called exactly once. */
+export function flipFate(
+  game: Game,
+  ctx: { forCardId?: string; forPlayerId?: string; outcome: string },
+  apply: (result: FateResult) => void,
+): void {
   const { state } = game;
   if (state.deck.length === 0) {
     if (state.discard.length === 0) throw new EngineError("E_NO_CARDS", "no cards left for fate");
@@ -528,16 +595,29 @@ export function flipFate(game: Game, ctx: { forCardId?: string; forPlayerId?: st
   const cardId = state.deck.pop()!;
   const inst = game.cards.get(cardId)!;
   state.discard.push(cardId);
-  emit(game, {
-    type: "fate_check",
-    forCardId: ctx.forCardId,
-    forPlayerId: ctx.forPlayerId,
-    cardId,
-    suit: inst.suit,
-    number: inst.number,
-    outcome: ctx.outcome,
-  });
-  return { cardId, suit: inst.suit, number: inst.number };
+
+  const finish = (suit: Suit, number: number): void => {
+    emit(game, {
+      type: "fate_check",
+      forCardId: ctx.forCardId,
+      forPlayerId: ctx.forPlayerId,
+      cardId,
+      suit,
+      number,
+      outcome: ctx.outcome,
+    });
+    apply({ cardId, suit, number });
+  };
+
+  if (hooks.modifyFate) {
+    hooks.modifyFate(
+      game,
+      { cardId, suit: inst.suit, number: inst.number, forPlayerId: ctx.forPlayerId, outcome: ctx.outcome },
+      (final) => finish(final.suit, final.number),
+    );
+  } else {
+    finish(inst.suit, inst.number);
+  }
 }
 
 export interface JamWindowOptions {
@@ -647,54 +727,53 @@ function resolveDelayed(game: Game, playerId: string, done: () => void): void {
         return;
       }
       removeDelayed(game, playerId, cardId);
-      const fate = flipFate(game, { forCardId: cardId, forPlayerId: playerId, outcome: d.defId });
-      game.state.discard.push(cardId);
-
-      if (d.defId === "ion_storm") {
-        const triggered = fate.suit === "spade" && fate.number >= 2 && fate.number <= 9;
-        if (triggered) {
-          dealDamage(game, {
-            targetId: playerId,
-            amount: 3,
-            element: "ion",
-            sourceCardId: cardId,
-            damageKind: "ion_storm",
-          });
-        } else {
-          // passes to next alive player WITHOUT an ion storm already
-          // (standard rule: lightning skips players who already have one)
-          const order = game.state.turnOrder;
-          const idx = order.indexOf(playerId);
-          let placed = false;
-          for (let i = 1; i <= order.length; i++) {
-            const cand = order[(idx + i) % order.length]!;
-            const cp = game.state.players[cand]!;
-            if (cp.alive && !cp.delayed.some((dd) => dd.defId === "ion_storm")) {
-              placeDelayed(game, cand, cardId, "ion_storm", d.placedBy);
-              // card comes back into play — remove from discard
-              const dIdx = game.state.discard.indexOf(cardId);
-              if (dIdx >= 0) game.state.discard.splice(dIdx, 1);
-              placed = true;
-              break;
+      flipFate(game, { forCardId: cardId, forPlayerId: playerId, outcome: d.defId }, (fate) => {
+        if (gameEnded(game)) return;
+        if (d.defId === "ion_storm") {
+          const triggered = fate.suit === "spade" && fate.number >= 2 && fate.number <= 9;
+          if (triggered) {
+            game.state.discard.push(cardId);
+            dealDamage(game, {
+              targetId: playerId,
+              amount: 3,
+              element: "ion",
+              sourceCardId: cardId,
+              damageKind: "ion_storm",
+            });
+          } else {
+            // passes to next alive player WITHOUT an ion storm already
+            // (standard rule: lightning skips players who already have one)
+            const order = game.state.turnOrder;
+            const idx = order.indexOf(playerId);
+            let placed = false;
+            for (let i = 1; i <= order.length; i++) {
+              const cand = order[(idx + i) % order.length]!;
+              const cp = game.state.players[cand]!;
+              if (cp.alive && !cp.delayed.some((dd) => dd.defId === "ion_storm")) {
+                placeDelayed(game, cand, cardId, "ion_storm", d.placedBy);
+                placed = true;
+                break;
+              }
+            }
+            if (!placed && game.state.players[playerId]!.alive) {
+              // all alive players already carry one → it stays on the current player
+              placeDelayed(game, playerId, cardId, "ion_storm", d.placedBy);
             }
           }
-          if (!placed && game.state.players[playerId]!.alive) {
-            // all alive players already carry one → it stays on the current player
-            placeDelayed(game, playerId, cardId, "ion_storm", d.placedBy);
-            const dIdx = game.state.discard.indexOf(cardId);
-            if (dIdx >= 0) game.state.discard.splice(dIdx, 1);
-          }
+          next();
+        } else if (d.defId === "ration_cut") {
+          game.state.discard.push(cardId);
+          if (fate.suit !== "club") game.turnCtx.skipDraw = true;
+          next();
+        } else if (d.defId === "lockdown") {
+          game.state.discard.push(cardId);
+          if (fate.suit !== "heart") game.turnCtx.skipPlay = true;
+          next();
+        } else {
+          game.state.discard.push(cardId);
+          next();
         }
-        next();
-      } else if (d.defId === "ration_cut") {
-        if (fate.suit !== "club") game.turnCtx.skipDraw = true;
-        next();
-      } else if (d.defId === "lockdown") {
-        if (fate.suit !== "heart") game.turnCtx.skipPlay = true;
-        next();
-      } else {
-        next();
-      }
+      });
     }
   };
   next();
@@ -732,7 +811,20 @@ export interface DamageRequest {
   damageKind?: DamageKind;
 }
 
-export function dealDamage(game: Game, req: DamageRequest): void {
+export function dealDamage(game: Game, req: DamageRequest & { noRedirect?: boolean }): void {
+  const { state } = game;
+  const target = state.players[req.targetId];
+  if (!target || !target.alive) return;
+
+  // pre-damage hook (Nyx Misdirect redirect etc.) — skills call proceed()
+  if (hooks.preDamage && !req.noRedirect) {
+    hooks.preDamage(game, req, (final) => applyDamage(game, final));
+    return;
+  }
+  applyDamage(game, req);
+}
+
+function applyDamage(game: Game, req: DamageRequest & { noRedirect?: boolean }): void {
   const { state } = game;
   const target = state.players[req.targetId];
   if (!target || !target.alive) return;
@@ -781,30 +873,59 @@ export function dealDamage(game: Game, req: DamageRequest): void {
     sourceCardId: req.sourceCardId,
   });
 
-  // M4 hooks fire here (post_damage skills) — see skills.ts
-  if (target.hp <= 0) enterDying(game, req.targetId, req.sourcePlayerId);
+  const firePost = (): void => {
+    // post-damage skill hooks only for a still-alive receiver (dying/dead skip —
+    // documented simplification vs physical game; verified in SIT A10)
+    if (state.players[req.targetId]!.alive) {
+      hooks.postDamageTaken?.({
+        game,
+        playerId: req.targetId,
+        sourcePlayerId: req.sourcePlayerId,
+        sourceCardId: req.sourceCardId,
+        amount,
+        element: req.element ?? "none",
+        damageKind: kind,
+      });
+    }
+  };
+
+  if (target.hp <= 0) {
+    // dying/save window settles FIRST, then post-damage triggers
+    enterDying(game, req.targetId, req.sourcePlayerId, firePost);
+  } else {
+    firePost();
+  }
 }
 
 /** Dying state: self-save first (Stim or Chem Brew), then others offer Stims
- *  in turn order. Prompt-driven; killPlayer runs when nobody saves. */
-export function enterDying(game: Game, playerId: string, killerId?: string): void {
+ *  in turn order. Prompt-driven; killPlayer runs when nobody saves.
+ *  `after` runs once the dying window settles (saved or dead). */
+export function enterDying(game: Game, playerId: string, killerId?: string, after?: () => void): void {
   const { state } = game;
   const dying = state.players[playerId]!;
-  if (!dying.alive) return;
+  if (!dying.alive) {
+    after?.();
+    return;
+  }
   emit(game, { type: "dying", playerId });
 
   const order = [playerId, ...turnOrderFrom(game, playerId).filter((id) => id !== playerId)];
   let idx = 0;
 
   const step = (): void => {
-    if (gameEnded(game)) return;
+    if (gameEnded(game)) {
+      after?.();
+      return;
+    }
     if (dying.hp > 0) {
       emit(game, { type: "saved", playerId });
+      after?.();
       return;
     }
     while (idx < order.length && !state.players[order[idx]!]!.alive) idx++;
     if (idx >= order.length) {
       killPlayer(game, playerId, killerId);
+      after?.();
       return;
     }
     const responderId = order[idx]!;
@@ -812,8 +933,8 @@ export function enterDying(game: Game, playerId: string, killerId?: string): voi
     const isSelf = responderId === playerId;
     const responder = state.players[responderId]!;
     const saveCards = responder.hand.filter((c) => {
-      const def = defIdOf(game, c);
-      return def === "stim" || (isSelf && def === "chem_brew");
+      const inst = game.cards.get(c);
+      return inst ? canSaveWith(responder.survivorId, inst, isSelf) : false;
     });
     if (saveCards.length === 0) {
       step(); // nothing to save with → no prompt
@@ -828,8 +949,8 @@ export function enterDying(game: Game, playerId: string, killerId?: string): voi
         if (action.kind !== "discard" || action.cardIds.length !== 1) return "E_BAD_ACTION";
         const cid = action.cardIds[0]!;
         if (!responder.hand.includes(cid)) return "E_NOT_IN_HAND";
-        const def = defIdOf(game, cid);
-        return def === "stim" || (isSelf && def === "chem_brew") ? null : "E_NOT_SAVE_CARD";
+        const inst = game.cards.get(cid);
+        return inst && canSaveWith(responder.survivorId, inst, isSelf) ? null : "E_NOT_SAVE_CARD";
       },
       resume: (action) => {
         if (action?.kind === "discard") {
@@ -902,6 +1023,10 @@ export function killPlayer(game: Game, playerId: string, killerId?: string): voi
   }
 
   checkGameEnd(game);
+
+  // If the CURRENT turn holder just died mid-turn, their cancelled prompts may
+  // have orphaned the turn-flow continuation (e.g. draw_skill_choice). Heal it.
+  recoverStalledTurn(game);
 }
 
 export function checkGameEnd(game: Game): { faction: Role; reason: string } | null {

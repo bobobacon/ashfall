@@ -21,7 +21,21 @@ function makePlayers(n: number) {
 function startedGame(n = 5, seed = 202): Game {
   const game = createGame({ roomId: "m3", seed, players: makePlayers(n) });
   for (const p of Object.values(game.state.players)) autoPick(game, p.id);
+  settle(game);
   return game;
+}
+
+/** Drain non-game-critical prompts (draw-skill choice, fate hack) by declining. */
+function settle(game: Game): void {
+  let guard = 0;
+  while (game.state.pendingPrompts.length > 0 && guard++ < 50) {
+    const pr = game.state.pendingPrompts[0]!;
+    if (pr.context.mode === "draw_skill_choice" || pr.kind === "fate_hack" || pr.kind === "reorder_deck") {
+      respond(game, pr.playerId, pr.id, { kind: "decline" });
+    } else {
+      break;
+    }
+  }
 }
 
 function ensureCard(game: Game, playerId: string, defId: string): string {
