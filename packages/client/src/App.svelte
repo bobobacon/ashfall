@@ -1,83 +1,64 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { connect, onConnection, send, setReconnectInfo, onMessage, type ConnectionState } from "./lib/stores/connection.js";
+  import { gameStore } from "./lib/stores/game.svelte.js";
+  import Home from "./lib/screens/Home.svelte";
+  import Lobby from "./lib/screens/Lobby.svelte";
+  import Draft from "./lib/screens/Draft.svelte";
+  import GameTable from "./lib/screens/GameTable.svelte";
+  import Winner from "./lib/screens/Winner.svelte";
+  import MetaProvider from "./lib/components/MetaProvider.svelte";
 
-  let health: { ok: boolean; version: string; ws: boolean } | null = $state(null);
-  let wsStatus: string = $state("connecting…");
+  let conn = $state<ConnectionState>({ status: "connecting" });
+  onConnection((s) => (conn = s));
 
-  onMount(async () => {
-    try {
-      const res = await fetch("/api/health");
-      health = await res.json();
-    } catch {
-      health = { ok: false, version: "?", ws: false };
+  onMessage((m) => {
+    if (m.type === "room:joined" && m.reconnectToken) {
+      setReconnectInfo(m.roomId, m.reconnectToken);
     }
-
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/ws`);
-    ws.onopen = () => (wsStatus = "open");
-    ws.onmessage = (ev) => {
-      const msg = JSON.parse(ev.data);
-      if (msg.type === "hello") wsStatus = `open (server v${msg.version})`;
-    };
-    ws.onerror = () => (wsStatus = "error");
-    ws.onclose = () => (wsStatus = "closed");
   });
+
+  connect();
+
+  const screen = $derived(gameStore.screen);
 </script>
 
-<main>
-  <h1>⚠ ASHFALL</h1>
-  <p class="subtitle">THE LAST BASTION — ป้อมสุดท้าย</p>
+<MetaProvider />
 
-  <div class="panel">
-    <p>
-      M0 scaffold — engine + server + client boot check.
-    </p>
-    <p>
-      API: <span class={health?.ok ? "ok" : "bad"}>{health ? (health.ok ? "OK v" + health.version : "DOWN") : "checking…"}</span>
-    </p>
-    <p>
-      WS: <span class={wsStatus.startsWith("open") ? "ok" : "bad"}>{wsStatus}</span>
-    </p>
-  </div>
+<div class="frame">
+  {#if conn.status !== "open"}
+    <div class="conn-bar">
+      ⚡ {conn.status === "reconnecting" ? "waking the wasteland…" : conn.status === "closed" ? "connection lost — retrying…" : "connecting…"}
+    </div>
+  {/if}
 
-  <div class="demo-pixel" title="pixel scaling demo"></div>
-</main>
+  {#if screen === "home"}
+    <Home onCreate={() => send({ type: "room:create", name: gameStore.playerName() })}
+          onJoin={(id) => send({ type: "room:join", roomId: id, playerName: gameStore.playerName() })} />
+  {:else if screen === "lobby"}
+    <Lobby onAddBot={() => send({ type: "room:addBot" })}
+           onStart={() => send({ type: "room:start" })}
+           onLeave={() => { send({ type: "room:leave" }); gameStore.reset(); }} />
+  {:else if screen === "draft"}
+    <Draft onPick={(id) => send({ type: "draft:pick", survivorId: id })} />
+  {:else if screen === "game"}
+    <GameTable onSend={send} />
+  {:else if screen === "winner"}
+    <Winner onHome={() => gameStore.reset()} />
+  {/if}
+</div>
 
 <style>
-  main {
+  .frame {
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-    padding: 3rem 1rem;
+  }
+  .conn-bar {
+    background: #2a1f14;
+    color: var(--ascendant);
     text-align: center;
-  }
-  h1 {
-    color: var(--sovereign);
-    letter-spacing: 0.3em;
-    text-shadow: 0 0 12px rgba(232, 197, 71, 0.4);
-    margin-bottom: 0;
-  }
-  .subtitle {
-    color: var(--text-dim);
-    margin-top: 0.25rem;
-  }
-  .panel {
-    background: var(--bg-panel);
-    border: 2px solid #3a3226;
-    padding: 1rem 2rem;
-    max-width: 420px;
-  }
-  .ok {
-    color: var(--accent-glow);
-  }
-  .bad {
-    color: var(--raider);
-  }
-  .demo-pixel {
-    width: 64px;
-    height: 64px;
-    background: linear-gradient(135deg, var(--tide), var(--ascendant));
-    transform: scale(1);
+    padding: 0.4rem;
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
   }
 </style>

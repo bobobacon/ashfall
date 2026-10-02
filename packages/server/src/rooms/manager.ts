@@ -566,7 +566,7 @@ export class RoomManager {
       room.phase === "draft" && !room.game.state.players[playerId]?.survivorId
         ? room.game.draftOffers.get(playerId)
         : undefined;
-    return viewFor(room.game.state, playerId, offer);
+    return viewFor(room.game.state, playerId, offer, room.game.cards);
   }
 
   spectatorView(room: Room): PlayerView | null {

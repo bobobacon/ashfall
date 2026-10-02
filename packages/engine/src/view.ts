@@ -1,6 +1,6 @@
 // Fog-of-war filter (doc 01 §7.1 / SIT B-05): builds the per-player view.
 // NEVER leak: other players' hand contents, hidden roles, deck order.
-import type { GameState, PlayerState, Role } from "@ashfall/shared";
+import type { CardInstance, GameState, PlayerState, Role } from "@ashfall/shared";
 
 export interface PlayerView {
   you: {
@@ -20,6 +20,9 @@ export interface PlayerView {
     flipped: boolean;
     buffs: PlayerState["buffs"];
   };
+  /** full details of the viewer's OWN hand cards (+ own equipment/delayed),
+   *  keyed by instance id — safe because they're already visible to the viewer */
+  cardDetails?: Record<string, CardInstance>;
   others: {
     id: string;
     name: string;
@@ -50,7 +53,12 @@ export interface PlayerView {
   seq: number;
 }
 
-export function viewFor(state: GameState, viewerId: string, draftOffer?: string[]): PlayerView {
+export function viewFor(
+  state: GameState,
+  viewerId: string,
+  draftOffer?: string[],
+  cards?: ReadonlyMap<string, CardInstance>,
+): PlayerView {
   const you = state.players[viewerId];
   if (!you) {
     // unknown/spectator viewer → public-only view
@@ -59,6 +67,23 @@ export function viewFor(state: GameState, viewerId: string, draftOffer?: string[
   const view = viewForPlayer(state, you, viewerId);
   if (draftOffer && draftOffer.length > 0) {
     view.you.draftOffer = [...draftOffer];
+  }
+  // Include details of the viewer's OWN visible cards (hand + equipment + delayed).
+  // Safe: these are already known to the viewer. Enables suit/number rendering
+  // for conversion skills (Ronan red→strike, etc.).
+  if (cards) {
+    const details: Record<string, CardInstance> = {};
+    const own = [
+      ...you.hand,
+      ...Object.values(you.equipment).filter((x): x is string => !!x),
+      ...you.delayed.map((d) => d.cardId),
+      ...(state.discard.slice(-1) as string[]), // top discard is public
+    ];
+    for (const id of own) {
+      const inst = cards.get(id);
+      if (inst) details[id] = inst;
+    }
+    view.cardDetails = details;
   }
   return view;
 }
