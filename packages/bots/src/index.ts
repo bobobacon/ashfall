@@ -1,2 +1,9 @@
-// Bot API — random-legal bot for seat filling + simulation testing.
-export { playRandomGame, type SimResult } from "./random-bot.js";
+// Bot package: policy (shared decision logic) + sim runner.
+export {
+  botRespond,
+  botChoosePlayAction,
+  botChooseDraft,
+  botChooseDiscards,
+  type BotTurnAction,
+} from "./policy.js";
+export { playRandomGame, drainPrompts, type SimResult } from "./random-bot.js";

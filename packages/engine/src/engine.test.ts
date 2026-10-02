@@ -281,7 +281,7 @@ describe("A11 deck integrity", () => {
     const game = createGame({ roomId: "cons", seed: 55, players: makePlayers(5) });
     finishDraft(game);
     const countAll = () => {
-      let total = game.state.deck.length + game.state.discard.length;
+      let total = game.state.deck.length + game.state.discard.length + game.limbo.length + game.revealed.length;
       for (const p of Object.values(game.state.players)) {
         total += p.hand.length;
         for (const slot of ["weapon", "armor", "rig_plus", "rig_minus"] as const) {

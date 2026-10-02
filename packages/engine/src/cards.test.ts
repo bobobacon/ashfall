@@ -528,3 +528,53 @@ describe("equipment install (M3 preview)", () => {
     expect(game.state.players[user]!.strikeCountThisTurn).toBe(2);
   });
 });
+
+describe("regression: delayed card limbo vs reshuffle hooks", () => {
+  // Bug (found by 1000-game sim): playDelayed staged the card in DISCARD while
+  // its jam window ran. If a hook drew cards during that window (Ryn Chain Burn
+  // on empty hand) and the deck was empty, the reshuffle swallowed the staged
+  // card back into the deck — and it was ALSO placed on the table = duplication
+  // (109 cards). Fix: hand→limbo zone, reshuffle-proof.
+  it("delayed card + empty-hand hook draw + reshuffle keeps conservation", () => {
+    const game = startedGame(4, 8899);
+    const ryn = cur(game);
+    // Ryn: playing his LAST card empties his hand → Chain Burn draws 1
+    game.state.players[ryn]!.survivorId = "ember_sage_ryn";
+    const p = game.state.players[ryn]!;
+    // reduce hand to exactly 1 card, and make it a ration_cut
+    const ration = ensureCard(game, ryn, "ration_cut");
+    // move ryn's other hand cards to discard (conserve), leaving only the ration
+    for (const c of p.hand) if (c !== ration) game.state.discard.push(c);
+    p.hand = [ration];
+    // nearly empty the deck so the Chain Burn draw triggers a reshuffle
+    game.state.discard.push(...game.state.deck.splice(0, game.state.deck.length - 1));
+    const target = nextPlayer(game);
+    game.state.players[target]!.survivorId = "brute_barehide"; // not immune
+
+    const countAll = (): number =>
+      game.state.deck.length +
+      game.state.discard.length +
+      game.limbo.length +
+      game.revealed.length +
+      Object.values(game.state.players).reduce(
+        (acc, pl) =>
+          acc +
+          pl.hand.length +
+          pl.delayed.length +
+          (["weapon", "armor", "rig_plus", "rig_minus"] as const).filter((s) => pl.equipment[s]).length,
+        0,
+      );
+    expect(countAll()).toBe(108);
+
+    playCard(game, { playerId: ryn, cardId: ration, targets: [target] });
+    // Chain Burn may have drawn+reshuffled mid-jam-window; drain prompts
+    drainAll(game);
+
+    expect(countAll()).toBe(108);
+    // the ration_cut exists exactly once — either placed on target or discarded (if jammed)
+    const placements = game.state.players[target]!.delayed.filter((d) => d.cardId === ration).length;
+    const inDiscard = game.state.discard.filter((c) => c === ration).length;
+    const inDeck = game.state.deck.filter((c) => c === ration).length;
+    expect(placements + inDiscard + inDeck).toBe(1);
+  });
+});

@@ -69,6 +69,29 @@ export interface Game {
   turnCtx: { skipDraw: boolean; skipPlay: boolean };
   /** cards revealed by Supply Drop (transient) */
   revealed: string[];
+  /**
+   * Limbo zone: cards mid-resolution (delayed tactics awaiting a jam window,
+   * etc.). Kept OUT of deck & discard so a reshuffle triggered by a hook can
+   * never swallow a card that is still being placed. Counted for conservation.
+   */
+  limbo: string[];
+}
+
+/** Move a card from a player's hand into the limbo zone (no discard round-trip).
+ *  Fires onHandEmpty AFTER the card is safely in limbo. */
+export function handToLimbo(game: Game, playerId: string, cardId: string, defId: string, targets?: string[]): void {
+  const p = game.state.players[playerId]!;
+  const idx = p.hand.indexOf(cardId);
+  if (idx >= 0) p.hand.splice(idx, 1);
+  game.limbo.push(cardId);
+  emit(game, { type: "card_played", playerId, cardId, defId, targets });
+  if (p.hand.length === 0 && p.alive) hooks.onHandEmpty?.(game, playerId);
+}
+
+/** Take a card out of limbo (to place on the table or send to discard). */
+export function takeFromLimbo(game: Game, cardId: string): void {
+  const idx = game.limbo.indexOf(cardId);
+  if (idx >= 0) game.limbo.splice(idx, 1);
 }
 
 const ALL_ROLES: Role[] = ["sovereign", "warden", "raider", "phantom"];
@@ -150,6 +173,7 @@ export function createGame(opts: CreateGameOptions): Game {
     nextPromptId: 0,
     turnCtx: { skipDraw: false, skipPlay: false },
     revealed: [],
+    limbo: [],
   };
 
   // Draft offers: Sovereign 3 random + 3 leaders (leaders reserved for sovereign);

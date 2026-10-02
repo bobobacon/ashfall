@@ -11,6 +11,8 @@ import {
   emit,
   flipFate,
   gameEnded,
+  handToLimbo,
+  takeFromLimbo,
   jamWindow,
   placeDelayed,
   type Game,
@@ -625,15 +627,16 @@ function playDelayed(
     throw new EngineError("E_GHOST_SIGNAL", "target untargetable (empty hand)");
   }
 
-  // card leaves hand; placement happens only if the jam window survives
-  discardFromHand(game, playerId, [cardId], "played_delayed");
-  emit(game, { type: "card_played", playerId, cardId, defId, targets });
-  const dIdx = game.state.discard.indexOf(cardId);
-  if (dIdx >= 0) game.state.discard.splice(dIdx, 1); // table zone, not discard
+  // Card leaves hand into LIMBO (not discard!) while the jam window resolves.
+  // A discard round-trip could be swallowed by a hook-triggered reshuffle
+  // (e.g. Ryn Chain Burn draws on empty hand → reshuffle → the staged card ends
+  // up back in the deck AND on the table = duplication). Limbo is reshuffle-proof.
+  handToLimbo(game, playerId, cardId, defId, targets);
 
   jamWindow(game, {
     description: { defId, sourceId: playerId, targetIds: [targetId] },
     onApply: () => {
+      takeFromLimbo(game, cardId);
       if (gameEnded(game) || !game.state.players[targetId]!.alive) {
         game.state.discard.push(cardId);
         return;
@@ -641,7 +644,8 @@ function playDelayed(
       placeDelayed(game, targetId, cardId, defId, playerId);
     },
     onCancel: () => {
-      game.state.discard.push(cardId);
+      takeFromLimbo(game, cardId);
+      game.state.discard.push(cardId); // jammed → discard
     },
   });
 }

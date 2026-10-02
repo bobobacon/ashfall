@@ -667,12 +667,13 @@ hooks.postDamageTaken = (ctx) => {
         a.kind === "decline" || (a.kind === "choose" && a.choice === cardId) ? null : "E_BAD_CHOICE",
       resume: (a) => {
         if (gameEnded(game) || a?.kind !== "choose") return;
+        // re-check: the card may have been reshuffled/drawn since the prompt
+        // was issued — only reclaim if it is STILL in the discard (anti-dupe)
         const idx = game.state.discard.indexOf(cardId);
-        if (idx >= 0) {
-          game.state.discard.splice(idx, 1);
-          game.state.players[p.id]!.hand.push(cardId);
-          emit(game, { type: "skill_activated", playerId: p.id, skillId: "scrap_reclaim" });
-        }
+        if (idx < 0) return;
+        game.state.discard.splice(idx, 1);
+        game.state.players[p.id]!.hand.push(cardId);
+        emit(game, { type: "skill_activated", playerId: p.id, skillId: "scrap_reclaim" });
       },
     });
     return;
