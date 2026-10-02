@@ -27,6 +27,7 @@ playwright/.cache/
 # artgen working files (generated art IS committed under packages/client/src/assets/generated)
 tools/artgen/work/
 tools/artgen/ledger.db
+tools/artgen/ledger.jsonl
 
 # os / editor
 .DS_Store
