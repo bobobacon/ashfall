@@ -11,6 +11,7 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@ashfall/bots": "workspace:*",
     "@ashfall/engine": "workspace:*",
     "@ashfall/shared": "workspace:*",
     "better-sqlite3": "^11.7.0",

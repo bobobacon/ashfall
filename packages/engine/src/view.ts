@@ -9,6 +9,8 @@ export interface PlayerView {
     seat: number;
     role: Role;
     survivorId?: string;
+    /** draft offers — present only for the viewer, only during the draft */
+    draftOffer?: string[];
     hp: number;
     maxHp: number;
     hand: string[];
@@ -48,9 +50,81 @@ export interface PlayerView {
   seq: number;
 }
 
-export function viewFor(state: GameState, viewerId: string): PlayerView {
+export function viewFor(state: GameState, viewerId: string, draftOffer?: string[]): PlayerView {
+  const you = state.players[viewerId];
+  if (!you) {
+    // unknown/spectator viewer → public-only view
+    return viewForSpectator(state);
+  }
+  const view = viewForPlayer(state, you, viewerId);
+  if (draftOffer && draftOffer.length > 0) {
+    view.you.draftOffer = [...draftOffer];
+  }
+  return view;
+}
+
+/** Public-only view for spectators: no hands, only revealed roles. */
+export function viewForSpectator(state: GameState): PlayerView {
   const draftDone = state.phase === "playing" || state.phase === "ended";
-  const you = state.players[viewerId]!;
+  const others = state.turnOrder.map((id) => {
+    const p = state.players[id]!;
+    return {
+      id: p.id,
+      name: p.name,
+      seat: p.seat,
+      alive: p.alive,
+      connected: p.connected,
+      handCount: p.hand.length,
+      ...(p.roleRevealed ? { role: p.role } : {}),
+      ...(draftDone && p.survivorId ? { survivorId: p.survivorId } : {}),
+      hp: p.hp,
+      maxHp: p.maxHp,
+      equipment: p.equipment,
+      delayed: p.delayed.map((d) => ({ defId: d.defId, placedBy: d.placedBy })),
+      tethered: p.tethered,
+      flipped: p.flipped,
+    };
+  });
+
+  return {
+    // `you` is required by the shape; spectators get an inert placeholder
+    you: {
+      id: "__spectator__",
+      name: "Spectator",
+      seat: -1,
+      role: "warden", // never displayed for spectators (client checks id)
+      hp: 0,
+      maxHp: 0,
+      hand: [],
+      equipment: {},
+      delayed: [],
+      tethered: false,
+      flipped: false,
+      buffs: { chemBrewNext: false, barehideMode: false },
+    },
+    others,
+    phase: state.phase,
+    ...(state.turnPhase ? { turnPhase: state.turnPhase } : {}),
+    ...(state.currentPlayerId ? { currentPlayerId: state.currentPlayerId } : {}),
+    turnNumber: state.turnNumber,
+    turnOrder: state.turnOrder.map((id) => ({
+      id,
+      seat: state.players[id]!.seat,
+      alive: state.players[id]!.alive,
+    })),
+    deckCount: state.deck.length,
+    discardCount: state.discard.length,
+    ...(state.discard.length > 0 ? { topDiscardId: state.discard[state.discard.length - 1] } : {}),
+    // spectators see only that a prompt exists, never its content
+    pendingPrompts: state.pendingPrompts.map((pr) => ({ ...pr, context: {} })),
+    ...(state.winner ? { winner: state.winner } : {}),
+    settings: state.settings,
+    seq: state.seq,
+  };
+}
+
+function viewForPlayer(state: GameState, you: PlayerState, viewerId: string): PlayerView {
+  const draftDone = state.phase === "playing" || state.phase === "ended";
 
   const others = state.turnOrder
     .filter((id) => id !== viewerId)

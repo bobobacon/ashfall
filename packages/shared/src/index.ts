@@ -8,6 +8,7 @@ import survivorsRaw from "./data/survivors.json" with { type: "json" };
 import type { CardDef, SurvivorDef } from "./types.js";
 
 export * from "./types.js";
+export * from "./protocol.js";
 
 const LocalizedText = z.object({ en: z.string(), th: z.string() });
 

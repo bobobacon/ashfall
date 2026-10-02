@@ -56,7 +56,7 @@ export {
   type FateResult,
   type JamWindowOptions,
 } from "./engine.js";
-export { viewFor, type PlayerView } from "./view.js";
+export { viewFor, viewForSpectator, type PlayerView } from "./view.js";
 export {
   playCard,
   installEquipment,

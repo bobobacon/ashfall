@@ -161,6 +161,8 @@ export function createGame(opts: CreateGameOptions): Game {
   const log = new EventLog();
   log.push({ type: "game_created", roomId: state.roomId, seed: state.seed, playerCount: n });
   log.push({ type: "roles_dealt", sovereignSeat: sovereign.seat });
+  // roles are dealt synchronously at creation → the game is immediately in draft
+  state.phase = "draft";
 
   const game: Game = {
     state,

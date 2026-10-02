@@ -83,6 +83,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@ashfall/bots':
+        specifier: workspace:*
+        version: link:../bots
       '@ashfall/engine':
         specifier: workspace:*
         version: link:../engine
