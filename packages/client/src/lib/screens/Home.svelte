@@ -1,10 +1,12 @@
 <script lang="ts">
   import { gameStore } from "../stores/game.svelte.js";
+  import { backgroundArt } from "../assets.js";
 
   let { onCreate, onJoin }: { onCreate: () => void; onJoin: (roomId: string) => void } = $props();
 
   let name = $state("");
   let roomId = $state("");
+  const bg = backgroundArt("lobby");
 
   $effect(() => {
     name = gameStore.playerName();
@@ -19,13 +21,14 @@
   }
 </script>
 
-<div class="home">
-  <div class="title-block">
+<div class="home" style:background-image={bg ? `url(${bg})` : undefined}>
+  <div class="scrim"></div>
+  <div class="title-block content">
     <h1>ASHFALL</h1>
     <p class="tagline">THE LAST BASTION · เถ้าธุลี: ป้อมสุดท้าย</p>
   </div>
 
-  <div class="panel">
+  <div class="panel content">
     <label class="field">
       <span>{gameStore.lang === "en" ? "Your name" : "ชื่อของคุณ"}</span>
       <input
@@ -60,7 +63,7 @@
     </button>
   </div>
 
-  <div class="lore">
+  <div class="lore content">
     <p>
       {gameStore.lang === "en"
         ? "Two hundred years after the Collapse, four powers circle Bastion Zero. Hidden roles. 108 cards. One survivor stands last — or none."
@@ -81,7 +84,15 @@
     background:
       radial-gradient(ellipse at 50% 120%, rgba(217, 95, 43, 0.12), transparent 60%),
       var(--bg-ash);
+    background-size: cover;
+    background-position: center;
+    position: relative;
   }
+  .scrim {
+    position: absolute; inset: 0;
+    background: linear-gradient(rgba(22, 19, 15, 0.72), rgba(22, 19, 15, 0.9));
+  }
+  .content { position: relative; z-index: 1; }
   .title-block { text-align: center; }
   h1 {
     font-size: clamp(2.5rem, 8vw, 4.5rem);

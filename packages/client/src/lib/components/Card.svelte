@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { CardInstanceInfo, CardMeta } from "../stores/game.svelte.js";
   import { gameStore } from "../stores/game.svelte.js";
+  import { cardArt } from "../assets.js";
 
   let {
     info,
@@ -43,7 +44,11 @@
 >
   <div class="corner" class:red>{suit}{rank}</div>
   <div class="art" data-def={info.defId}>
-    <span class="art-glyph">{meta?.category === "equipment" ? "⚙" : meta?.category === "delay" ? "⏳" : "✦"}</span>
+    {#if cardArt(info.defId)}
+      <img src={cardArt(info.defId)} alt={name} class="pixel-art-img" />
+    {:else}
+      <span class="art-glyph">{meta?.category === "equipment" ? "⚙" : meta?.category === "delay" ? "⏳" : "✦"}</span>
+    {/if}
   </div>
   <div class="cname" style:color={catColor}>{name}</div>
   {#if meta?.range}<div class="range">⌖{meta.range}</div>{/if}
@@ -81,6 +86,7 @@
     image-rendering: pixelated;
   }
   .art-glyph { font-size: 1.4rem; color: var(--text-dim); }
+  .pixel-art-img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
   .cname { font-size: 0.55rem; line-height: 1.15; text-align: center; overflow: hidden; }
   .range { position: absolute; top: 2px; right: 4px; font-size: 0.6rem; color: var(--text-dim); }
 </style>

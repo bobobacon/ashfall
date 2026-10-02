@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ViewPlayerOther, ViewYou } from "../stores/game.svelte.js";
   import { gameStore } from "../stores/game.svelte.js";
+  import { survivorPortrait } from "../assets.js";
 
   let {
     other,
@@ -16,11 +17,16 @@
   const factionColor = $derived(
     surv ? `var(--${surv.faction === "syndicate" ? "syndicate" : surv.faction === "verdant" ? "verdant" : surv.faction === "tide" ? "tide" : surv.faction === "ascendant" ? "ascendant" : "walker"})` : "#4a4034",
   );
+  const portrait = $derived(other.survivorId ? survivorPortrait(other.survivorId) : undefined);
 </script>
 
 <div class="seat" class:current={isCurrent} class:dead={!other.alive} class:compact class:offline={!other.connected}>
   <div class="portrait" style:border-color={factionColor}>
-    <span class="initials">{surv ? surv.name.en.slice(0, 2).toUpperCase() : "??"}</span>
+    {#if portrait}
+      <img src={portrait} alt={surv?.name.en ?? other.survivorId ?? ""} class="pixel-art-img" />
+    {:else}
+      <span class="initials">{surv ? surv.name.en.slice(0, 2).toUpperCase() : "??"}</span>
+    {/if}
     {#if other.flipped}<span class="flipped-tag">💤</span>{/if}
     {#if other.tethered}<span class="tether-tag">⛓</span>{/if}
   </div>
@@ -72,6 +78,7 @@
   }
   .compact .portrait { width: 34px; height: 34px; }
   .initials { font-size: 0.85rem; color: var(--text-dim); font-weight: bold; }
+  .pixel-art-img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
   .flipped-tag, .tether-tag { position: absolute; font-size: 0.7rem; top: -6px; right: -6px; }
   .tether-tag { top: auto; bottom: -6px; }
   .info { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { gameStore } from "../stores/game.svelte.js";
+  import { survivorPortrait } from "../assets.js";
 
   let { onPick }: { onPick: (survivorId: string) => void } = $props();
 
@@ -39,7 +40,11 @@
         <button class="card" style:border-color={FACTION_COLORS[s.faction] ?? "#4a4034"}
                 disabled={picked} onclick={() => onPick(sid)}>
           <div class="portrait" style:background={FACTION_COLORS[s.faction] ?? "#333"}>
-            <span class="initials">{s.name.en.slice(0, 2).toUpperCase()}</span>
+            {#if survivorPortrait(sid)}
+              <img src={survivorPortrait(sid)} alt={s.name.en} class="pixel-art-img" />
+            {:else}
+              <span class="initials">{s.name.en.slice(0, 2).toUpperCase()}</span>
+            {/if}
           </div>
           <div class="cname">{s.name[lang]}</div>
           <div class="faction" style:color={FACTION_COLORS[s.faction]}>
@@ -105,6 +110,7 @@
     border: 2px solid #000;
   }
   .initials { font-size: 1.6rem; color: #0d0b08; font-weight: bold; letter-spacing: 0.1em; }
+  .pixel-art-img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
   .cname { font-size: 0.95rem; font-weight: bold; }
   .faction { font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; }
   .hp { font-size: 0.8rem; color: var(--verdant); }
