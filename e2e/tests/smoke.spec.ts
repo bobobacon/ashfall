@@ -42,14 +42,18 @@ test("C-03: draft offers appear with 3 survivers and picking works", async ({ br
   await expect(host.locator(".seat")).toHaveCount(3);
   await host.getByRole("button", { name: /▶ Start game/ }).click();
 
-  // draft screen: 3 survivor cards with names + skills
-  await expect(host.locator(".offers .card")).toHaveCount(3, { timeout: 15_000 });
+  // draft screen: offer cards — Sovereign sees 6 (3 random + 3 leaders), others 3
+  const offerCard = host.locator(".offers .card");
+  await expect(offerCard.first()).toBeVisible({ timeout: 15_000 });
+  const offerCount = await offerCard.count();
+  expect([3, 6]).toContain(offerCount);
   const firstName = (await host.locator(".offers .card .cname").first().textContent()) ?? "";
   expect(firstName.length).toBeGreaterThan(0);
 
-  // pick the first — draft resolves to game table
+  // pick the first — draft resolves to game table (hand-area visible = in game)
   await host.locator(".offers .card").first().click();
-  await expect(host.locator(".feed, .hand-area")).toBeVisible({ timeout: 20_000 });
+  await expect(host.locator(".hand-area")).toBeVisible({ timeout: 20_000 });
+  await expect(host.locator(".feed")).toBeVisible();
 
   await host.close();
 });
@@ -64,7 +68,18 @@ test("C-09: disconnect banner during idle (reconnect path)", async ({ browser })
   await guest.getByRole("button", { name: /^Join$/ }).click();
   await expect(host.locator(".seat", { hasText: "G2" })).toBeVisible();
 
-  // guest closes connection, host marks them offline
+  // start the game (3 players: host+guest+bot)
+  await host.getByRole("button", { name: /\+ Add bot/ }).click();
+  await host.getByRole("button", { name: /▶ Start game/ }).click();
+  await expect(host.locator(".offers .card").first()).toBeVisible({ timeout: 15_000 });
+  await expect(guest.locator(".offers .card").first()).toBeVisible({ timeout: 15_000 });
+
+  // both humans pick → game reaches the table (offline marking is mid-game only)
+  await host.locator(".offers .card").first().click();
+  await guest.locator(".offers .card").first().click();
+  await expect(host.locator(".hand-area")).toBeVisible({ timeout: 20_000 });
+
+  // guest closes connection mid-game; host marks them offline
   await guest.close();
   await expect(host.locator(".seat.offline").first()).toBeVisible({ timeout: 15_000 });
 

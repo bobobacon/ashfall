@@ -170,6 +170,10 @@ export class RoomManager {
     player.connected = true;
     player.botTakenOver = false;
     room.connToPlayer.set(connId, player.id);
+    // sync the ENGINE player's connected flag so views render it correctly
+    if (room.game?.state.players[player.id]) {
+      room.game.state.players[player.id]!.connected = true;
+    }
     const key = `takeover:${player.id}`;
     const t = room.timers.get(key);
     if (t) {
@@ -216,7 +220,11 @@ export class RoomManager {
       if (room.players.length === 0) this.deleteRoom(room.id);
       return;
     }
-    // mid-game: mark disconnected, bot takes over after grace
+    // mid-game: mark disconnected, bot takes over after grace.
+    // Sync the ENGINE flag too — views render from state.players[].connected.
+    if (room.game?.state.players[playerId]) {
+      room.game.state.players[playerId]!.connected = false;
+    }
     player.connected = false;
     this.scheduleBotTakeover(room, player);
   }
