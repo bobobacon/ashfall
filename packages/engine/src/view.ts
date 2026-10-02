@@ -34,7 +34,9 @@ export interface PlayerView {
     survivorId?: string; // public after draft
     hp: number;
     maxHp: number;
-    equipment: PlayerState["equipment"];
+    equipment: PlayerState["equipment"]; // slot → instance id
+    /** slot → card DEF id (public info; lets the UI render card art/names) */
+    equipDefs: Partial<Record<keyof PlayerState["equipment"], string>>;
     delayed: { defId: string; placedBy: string }[];
     tethered: boolean;
     flipped: boolean;
@@ -53,6 +55,21 @@ export interface PlayerView {
   seq: number;
 }
 
+const idToDef = (cards: ReadonlyMap<string, CardInstance> | undefined, id?: string): string | undefined =>
+  id ? cards?.get(id)?.defId : undefined;
+
+function equipDefsOf(
+  equipment: PlayerState["equipment"],
+  cards?: ReadonlyMap<string, CardInstance>,
+): Partial<Record<keyof PlayerState["equipment"], string>> {
+  return {
+    weapon: idToDef(cards, equipment.weapon),
+    armor: idToDef(cards, equipment.armor),
+    rig_plus: idToDef(cards, equipment.rig_plus),
+    rig_minus: idToDef(cards, equipment.rig_minus),
+  };
+}
+
 export function viewFor(
   state: GameState,
   viewerId: string,
@@ -62,9 +79,9 @@ export function viewFor(
   const you = state.players[viewerId];
   if (!you) {
     // unknown/spectator viewer → public-only view
-    return viewForSpectator(state);
+    return viewForSpectator(state, cards);
   }
-  const view = viewForPlayer(state, you, viewerId);
+  const view = viewForPlayer(state, you, viewerId, cards);
   if (draftOffer && draftOffer.length > 0) {
     view.you.draftOffer = [...draftOffer];
   }
@@ -89,7 +106,7 @@ export function viewFor(
 }
 
 /** Public-only view for spectators: no hands, only revealed roles. */
-export function viewForSpectator(state: GameState): PlayerView {
+export function viewForSpectator(state: GameState, cards?: ReadonlyMap<string, CardInstance>): PlayerView {
   const draftDone = state.phase === "playing" || state.phase === "ended";
   const others = state.turnOrder.map((id) => {
     const p = state.players[id]!;
@@ -105,6 +122,7 @@ export function viewForSpectator(state: GameState): PlayerView {
       hp: p.hp,
       maxHp: p.maxHp,
       equipment: p.equipment,
+      equipDefs: equipDefsOf(p.equipment, cards),
       delayed: p.delayed.map((d) => ({ defId: d.defId, placedBy: d.placedBy })),
       tethered: p.tethered,
       flipped: p.flipped,
@@ -148,7 +166,12 @@ export function viewForSpectator(state: GameState): PlayerView {
   };
 }
 
-function viewForPlayer(state: GameState, you: PlayerState, viewerId: string): PlayerView {
+function viewForPlayer(
+  state: GameState,
+  you: PlayerState,
+  viewerId: string,
+  cards?: ReadonlyMap<string, CardInstance>,
+): PlayerView {
   const draftDone = state.phase === "playing" || state.phase === "ended";
 
   const others = state.turnOrder
@@ -169,6 +192,7 @@ function viewForPlayer(state: GameState, you: PlayerState, viewerId: string): Pl
         hp: p.hp,
         maxHp: p.maxHp,
         equipment: p.equipment,
+        equipDefs: equipDefsOf(p.equipment, cards),
         delayed: p.delayed.map((d) => ({ defId: d.defId, placedBy: d.placedBy })),
         tethered: p.tethered,
         flipped: p.flipped,

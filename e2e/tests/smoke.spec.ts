@@ -52,7 +52,7 @@ test("C-03: draft offers appear with 3 survivers and picking works", async ({ br
 
   // pick the first — draft resolves to game table (hand-area visible = in game)
   await host.locator(".offers .card").first().click();
-  await expect(host.locator(".hand-area")).toBeVisible({ timeout: 20_000 });
+  await expect(host.locator(".me-zone")).toBeVisible({ timeout: 20_000 });
   await expect(host.locator(".feed")).toBeVisible();
 
   await host.close();
@@ -77,7 +77,7 @@ test("C-09: disconnect banner during idle (reconnect path)", async ({ browser })
   // both humans pick → game reaches the table (offline marking is mid-game only)
   await host.locator(".offers .card").first().click();
   await guest.locator(".offers .card").first().click();
-  await expect(host.locator(".hand-area")).toBeVisible({ timeout: 20_000 });
+  await expect(host.locator(".me-zone")).toBeVisible({ timeout: 20_000 });
 
   // guest closes connection mid-game; host marks them offline
   await guest.close();

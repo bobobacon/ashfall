@@ -46,6 +46,7 @@ export interface ViewPlayerOther {
   hp: number;
   maxHp: number;
   equipment: Record<string, string | undefined>;
+  equipDefs: Partial<Record<"weapon" | "armor" | "rig_plus" | "rig_minus", string>>;
   delayed: { defId: string; placedBy: string }[];
   tethered: boolean;
   flipped: boolean;
