@@ -1,0 +1,22 @@
+{
+  "name": "@ashfall/artgen",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/cli.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "plan": "node dist/cli.js plan",
+    "probe": "node dist/cli.js probe",
+    "run": "node dist/cli.js run",
+    "approve": "node dist/cli.js approve",
+    "status": "node dist/cli.js status"
+  },
+  "dependencies": {
+    "@ashfall/server": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

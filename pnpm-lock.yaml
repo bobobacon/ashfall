@@ -137,6 +137,16 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  tools/artgen:
+    dependencies:
+      '@ashfall/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
 packages:
 
   '@drizzle-team/brocli@0.10.2':
