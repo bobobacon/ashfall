@@ -3,7 +3,7 @@
 // import.meta.glob eager-imports them so Vite bundles + hashes them into dist.
 // Every lookup falls back to a placeholder gracefully (art is optional data).
 
-const generated = import.meta.glob("./assets/generated/**/*", {
+const generated = import.meta.glob("../assets/generated/**/*", {
   eager: true,
   query: "?url",
   import: "default",
@@ -12,8 +12,8 @@ const generated = import.meta.glob("./assets/generated/**/*", {
 /** Resolve a generated asset by its manifest file path ("survivors/baron_kaine.png").
  *  Returns undefined when the asset isn't approved/bundled yet → callers fall back. */
 export function assetUrl(file: string): string | undefined {
-  const key = `./assets/generated/${file}`;
-  return generated[key];
+  const key = `../assets/generated/${file}`;
+  return generated[key] ?? generated[`./assets/generated/${file}`];
 }
 
 /** Survivor portrait by survivor id (e.g. "baron_kaine"); falls back to undefined. */
