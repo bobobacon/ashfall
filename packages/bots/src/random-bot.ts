@@ -7,15 +7,20 @@ import {
   endTurn,
   playCard,
   respond,
+  useSkill,
+  canUseSkillNow,
+  canActAs,
   defIdOf,
-  handDefIds,
   distance,
   inAttackRange,
   strikeLimit,
+  type ActiveSkillId,
   type Game,
   type CreateGameOptions,
   type RespondAction,
+  type UseSkillRequest,
 } from "@ashfall/engine";
+import { SURVIVOR_DEFS } from "@ashfall/shared";
 
 export interface SimResult {
   seed: number;
@@ -29,6 +34,11 @@ export interface SimResult {
 /** Un-narrowed phase read (engine mutations are invisible to TS control flow). */
 function phaseOf(game: Game): string {
   return game.state.phase;
+}
+
+/** Un-narrowed turnPhase read — same reason as phaseOf. */
+function turnPhaseOf(game: Game): string | undefined {
+  return game.state.turnPhase;
 }
 
 /** Answer all pending prompts with random legal responses. */
@@ -134,6 +144,95 @@ function isGhost(t: { survivorId?: string; hand: string[] }): boolean {
   return t.survivorId === "sage_aldric" && t.hand.length === 0;
 }
 
+/** Try a random active skill for the current player (play phase). */
+function tryRandomSkill(game: Game): boolean {
+  const cur = game.state.currentPlayerId!;
+  const p = game.state.players[cur]!;
+  if (!p.alive || !p.survivorId) return false;
+
+  const others = Object.values(game.state.players).filter((o) => o.alive && o.id !== cur);
+  if (others.length === 0) return false;
+  const flip = game.rng.next();
+  if (flip > 0.25) return false; // only sometimes, to keep games varied
+
+  const tryUse = (skillId: ActiveSkillId, req: Omit<UseSkillRequest, "playerId" | "skillId">): boolean => {
+    if (!canUseSkillNow(game, cur, skillId)) return false;
+    try {
+      useSkill(game, { playerId: cur, skillId, ...req });
+      drainPrompts(game);
+      return true;
+    } catch {
+      return false; // illegal in this exact state — fall through
+    }
+  };
+
+  switch (p.survivorId) {
+    case "bastion":
+      return tryUse("bunker_down", {});
+    case "tide_lord_soran":
+      if (p.hand.length > 0) {
+        return tryUse("reforge", { cardIds: [game.rng.pick(p.hand)] });
+      }
+      return false;
+    case "matriarch_vala":
+      if (p.hand.length > 0) {
+        return tryUse("almsgiver", {
+          targets: [game.rng.pick(others).id],
+          cardIds: [game.rng.pick(p.hand)],
+        });
+      }
+      return false;
+    case "vesper_blade_dancer": {
+      const slots = (["weapon", "armor", "rig_plus", "rig_minus"] as const).filter(
+        (s) => p.equipment[s],
+      );
+      if (slots.length === 0 || p.hp >= p.maxHp) return false;
+      return tryUse("bond_weave", {
+        cardIds: [p.equipment[slots[0]!]!],
+        targets: [],
+      });
+    }
+    case "quartermaster_orlo":
+      if (others.length >= 2) {
+        const [t1, t2] = game.rng.shuffle(others).slice(0, 2);
+        if (tryUse("barter", { targets: [t1!.id, t2!.id] })) return true;
+      }
+      return false;
+    case "femme_black_widow": {
+      const males = others.filter(
+        (o) => o.survivorId && SURVIVOR_DEFS[o.survivorId]?.gender === "male",
+      );
+      if (males.length < 2 || p.hand.length === 0) return false;
+      const [m1, m2] = game.rng.shuffle(males).slice(0, 2);
+      return tryUse("honey_trap", {
+        targets: [m1!.id, m2!.id],
+        cardIds: [game.rng.pick(p.hand)],
+      });
+    }
+    case "doc_mort": {
+      const injured = [p, ...others].filter((o) => o.hp < o.maxHp);
+      if (injured.length === 0 || p.hand.length === 0) return false;
+      return tryUse("triage", {
+        targets: [game.rng.pick(injured).id],
+        cardIds: [game.rng.pick(p.hand)],
+      });
+    }
+    case "baron_howl": {
+      if (p.hand.length < 2) return false;
+      const bySuit = new Map<string, string[]>();
+      for (const c of p.hand) {
+        const s = game.cards.get(c)!.suit;
+        bySuit.set(s, [...(bySuit.get(s) ?? []), c]);
+      }
+      const pair = [...bySuit.values()].find((v) => v.length >= 2);
+      if (!pair) return false;
+      return tryUse("satellite_call", { cardIds: pair.slice(0, 2) });
+    }
+    default:
+      return false;
+  }
+}
+
 /** Pick a random legal card to play from the current player's hand, if any. */
 function tryRandomPlay(game: Game): boolean {
   const cur = game.state.currentPlayerId!;
@@ -144,7 +243,7 @@ function tryRandomPlay(game: Game): boolean {
   if (others.length === 0) return false;
 
   // gather candidate plays
-  type Candidate = { cardId: string; targets?: string[] };
+  type Candidate = { cardId: string; targets?: string[]; asDefId?: string };
   const candidates: Candidate[] = [];
 
   for (const cardId of p.hand) {
@@ -249,19 +348,36 @@ function tryRandomPlay(game: Game): boolean {
         candidates.push({ cardId });
         break;
       }
-      default:
+      default: {
+        // conversion skills: Ronan red→strike (bot plays converted strikes too)
+        if (
+          p.survivorId === "ronan_crimson_blade" &&
+          p.strikeCountThisTurn < strikeLimit(game, cur) &&
+          defIdOf(game, cardId) !== "strike" &&
+          canActAs(game, cur, cardId, "strike")
+        ) {
+          for (const t of others) {
+            if (isGhost(t)) continue;
+            if (inAttackRange(game.state, cur, t.id, game.cards)) {
+              candidates.push({ cardId, targets: [t.id], asDefId: "strike" });
+            }
+          }
+        }
         break; // evade / signal_jam: response-only
+      }
     }
   }
 
   if (candidates.length === 0) return false;
   // prefer strikes 60% of the time so games actually progress toward kills
-  const strikes = candidates.filter((c) => defIdOf(game, c.cardId) === "strike");
+  const strikes = candidates.filter(
+    (c) => defIdOf(game, c.cardId) === "strike" || c.asDefId === "strike",
+  );
   const pick =
     strikes.length > 0 && game.rng.next() < 0.6
       ? game.rng.pick(strikes)
       : game.rng.pick(candidates);
-  playCard(game, { playerId: cur, cardId: pick.cardId, targets: pick.targets });
+  playCard(game, { playerId: cur, cardId: pick.cardId, targets: pick.targets, asDefId: pick.asDefId });
   drainPrompts(game);
   return true;
 }
@@ -292,7 +408,7 @@ export function playRandomGame(opts: CreateGameOptions, maxTurns = 500): SimResu
       const turnBefore = game.state.turnNumber;
       result.turns = turnBefore;
 
-      // play up to 3 random legal cards this turn (play phase only, no pending prompts)
+      // play up to 3 random legal actions this turn (play phase only, no pending prompts)
       let plays = 0;
       while (
         plays < 3 &&
@@ -301,6 +417,10 @@ export function playRandomGame(opts: CreateGameOptions, maxTurns = 500): SimResu
         game.state.turnPhase === "play" &&
         game.state.pendingPrompts.length === 0
       ) {
+        if (tryRandomSkill(game)) {
+          plays++;
+          continue;
+        }
         if (!tryRandomPlay(game)) break;
         drainPrompts(game);
         plays++;
@@ -318,7 +438,7 @@ export function playRandomGame(opts: CreateGameOptions, maxTurns = 500): SimResu
       } else {
         // still in draw/start phase with prompts — drain again or break to avoid spinning
         drainPrompts(game);
-        if (game.state.currentPlayerId === cur && game.state.turnPhase !== "play") {
+        if (game.state.currentPlayerId === cur && turnPhaseOf(game) !== "play") {
           result.crashed = `stuck in phase ${String(game.state.turnPhase)} cur=${cur} surv=${String(game.state.players[cur]!.survivorId)} alive=${game.state.players[cur]!.alive} pendingMap=${game.pending.size} aliveAll=${Object.values(game.state.players).filter((x) => x.alive).map((x) => x.id + ":" + String(x.survivorId)).join(",")}`;
           break;
         }

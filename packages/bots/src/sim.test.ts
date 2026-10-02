@@ -40,4 +40,23 @@ describe("E-01: 1000 bot-vs-bot games", () => {
     expect(winners.has("raider")).toBe(true);
     expect(winners.has("phantom")).toBe(true);
   });
+
+  it("role win-rates within sanity bands (M4 gate; full balance in M8)", () => {
+    const counts: Record<string, number> = {};
+    for (const r of results) counts[r.winner!] = (counts[r.winner!] ?? 0) + 1;
+    const n = results.length;
+    // Random bots are chaotic — bands are wide sanity checks, not balance targets.
+    // Raiders (most numerous role) expected to win most often.
+    const raiderRate = (counts["raider"] ?? 0) / n;
+    const sovereignRate = (counts["sovereign"] ?? 0) / n;
+    const phantomRate = (counts["phantom"] ?? 0) / n;
+    console.log(
+      `win-rates: raider=${(raiderRate * 100).toFixed(1)}% sovereign=${(sovereignRate * 100).toFixed(1)}% phantom=${(phantomRate * 100).toFixed(1)}%`,
+    );
+    expect(raiderRate).toBeGreaterThan(0.15);
+    expect(raiderRate).toBeLessThan(0.85);
+    expect(sovereignRate).toBeGreaterThan(0.05);
+    expect(sovereignRate).toBeLessThan(0.7);
+    expect(phantomRate).toBeLessThan(0.5); // hardest role; shouldn't dominate randomly
+  });
 });

@@ -517,11 +517,8 @@ function resolveScavenge(game: Game, playerId: string, targetId: string): void {
         game.state.players[playerId]!.hand.push(stolen);
         emit(game, { type: "card_discarded", playerId: targetId, cardId: stolen, reason: "scavenged" });
       } else {
-        removeEquipment(game, targetId, zone, "scavenged");
-        // scavenged equipment goes to the taker's HAND (manual: take installed card)
-        const dIdx = game.state.discard.length - 1;
-        const moved = game.state.discard.splice(dIdx, 1)[0]!;
-        game.state.players[playerId]!.hand.push(moved);
+        // equipment goes directly to the taker's hand (no discard round-trip)
+        removeEquipment(game, targetId, zone, "scavenged", playerId);
       }
     },
   });
@@ -600,11 +597,8 @@ function resolveProxyWar(game: Game, playerId: string, aId: string, bId: string)
         });
         openEvadeWindow(game, aId, bId, action.cardIds[0], 1, { railgun: false });
       } else {
-        // refuses → initiator takes A's weapon
-        removeEquipment(game, aId, "weapon", "proxy_war_refused");
-        const dIdx = game.state.discard.length - 1;
-        const moved = game.state.discard.splice(dIdx, 1)[0]!;
-        game.state.players[playerId]!.hand.push(moved);
+        // refuses → initiator takes A's weapon directly into hand
+        removeEquipment(game, aId, "weapon", "proxy_war_refused", playerId);
       }
     },
   });

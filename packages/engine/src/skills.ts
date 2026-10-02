@@ -561,18 +561,26 @@ export function kaanFateGate(
   });
 }
 
-/** Central equipment removal — fires the onEquipmentLost hook (Vesper Salvage). */
+/** Central equipment removal — fires the onEquipmentLost hook (Vesper Salvage).
+ *  `toHandOf`: move the card directly to another player's hand instead of the
+ *  discard (Scavenge / Proxy War take). Direct transfer avoids the fragile
+ *  "splice last discard" pattern which breaks when hooks reshuffle the deck. */
 export function removeEquipment(
   game: Game,
   playerId: string,
   slot: EquipmentSlot,
   reason: string,
+  toHandOf?: string,
 ): void {
   const p = game.state.players[playerId]!;
   const cardId = p.equipment[slot];
   if (!cardId) return;
   delete p.equipment[slot];
-  game.state.discard.push(cardId);
+  if (toHandOf) {
+    game.state.players[toHandOf]!.hand.push(cardId);
+  } else {
+    game.state.discard.push(cardId);
+  }
   emit(game, { type: "equipment_removed", playerId, cardId, slot, reason });
   hooks.onEquipmentLost?.(game, playerId, cardId, slot, reason);
 }
