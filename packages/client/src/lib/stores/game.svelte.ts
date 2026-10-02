@@ -117,6 +117,8 @@ class GameStore {
   prompt = $state<PromptInfo | null>(null);
   ended = $state<GameEndedInfo | null>(null);
   events = $state<{ type: string; [k: string]: unknown }[]>([]);
+  /** full game history (from log:history) for the log drawer */
+  history = $state<{ type: string; [k: string]: unknown }[]>([]);
   myPlayerId = $state<string | null>(null);
   lang = $state<"en" | "th">("en");
 
@@ -212,6 +214,9 @@ class GameStore {
       case "game:ended":
         this.ended = { winner: msg.winner, reason: msg.reason, roles: msg.roles };
         this.prompt = null;
+        break;
+      case "log:history":
+        this.history = msg.events as { type: string }[];
         break;
       case "error":
         // surface as a transient event line (screens can render toasts)

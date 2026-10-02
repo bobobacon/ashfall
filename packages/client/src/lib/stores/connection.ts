@@ -11,13 +11,15 @@ export interface ConnectionState {
 type Listener = (msg: ServerMsgT) => void;
 
 const listeners = new Set<Listener>();
+const stateListeners = new Set<(s: ConnectionState) => void>();
 let ws: WebSocket | null = null;
 let state: ConnectionState = { status: "connecting" };
-const stateListeners = new Set<(s: ConnectionState) => void>();
 let lastSeq = 0;
 let reconnectAttempts = 0;
 let reconnectToken: string | undefined;
 let roomId: string | undefined;
+/** intents queued while disconnected — flushed on reconnect */
+const pendingQueue: ClientIntentT[] = [];
 
 function wsUrl(): string {
   const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -36,7 +38,17 @@ export function connect(): void {
     // rejoin room if we have a token (reconnect flow)
     if (reconnectToken && roomId) {
       send({ type: "room:join", roomId, playerName: "reconnect", reconnectToken });
-      send({ type: "resync" });
+    }
+    // flush any intents queued while we were down
+    while (pendingQueue.length > 0) {
+      const queued = pendingQueue.shift()!;
+      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(queued));
+    }
+    // re-sync state after a gap
+    send({ type: "resync" });
+    // if we were mid-game, re-request the history so the drawer stays consistent
+    if (gameStore.history.length > 0 || gameStore.view) {
+      // (game:view will be re-sent by the server via resync)
     }
   };
 
@@ -98,6 +110,10 @@ export function onMessage(fn: Listener): () => void {
 export function send(intent: ClientIntentT): void {
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(intent));
+  } else {
+    // offline/handshaking → queue; flush on reconnect (bounded to avoid
+    // unbounded growth during a long outage)
+    if (pendingQueue.length < 200) pendingQueue.push(intent);
   }
 }
 

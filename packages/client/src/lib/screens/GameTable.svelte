@@ -7,6 +7,7 @@
   import CardComponent from "../components/Card.svelte";
   import PromptModal from "../components/PromptModal.svelte";
   import IdentityModal from "../components/IdentityModal.svelte";
+  import LogDrawer from "../components/LogDrawer.svelte";
 
   let {
     onSend,
@@ -26,6 +27,138 @@
   let chosenTargets = $state<string[]>([]);
   // identity modal
   let identityFor = $state<"me" | string | null>(null); // "me" or other player id
+  // event log drawer
+  let logOpen = $state(false);
+
+  // --- animations ------------------------------------------------------------
+  // Turn/phase banners queue (so transitions don't stack/overlap)
+  let bannerQueue = $state<{ id: number; title: string; sub?: string; icon: string }[]>([]);
+  let bannerActive = $state<{ id: number; title: string; sub?: string; icon: string } | null>(null);
+  let bannerTimer: ReturnType<typeof setTimeout> | undefined;
+  let bannerId = 1;
+
+  // Transient card-play/damage floaters keyed by seat (player id)
+  let floaters = $state<Record<string, { id: number; kind: "play" | "damage" | "heal" | "fate" | "death" | "draw"; text: string; ts: number }[]>>({});
+  let floaterId = 1;
+
+  function pushBanner(title: string, sub?: string, icon = "▶"): void {
+    const id = bannerId++;
+    bannerQueue = [...bannerQueue, { id, title, sub, icon }];
+    if (!bannerActive) pumpBanner();
+  }
+
+  function pumpBanner(): void {
+    if (bannerQueue.length === 0) {
+      bannerActive = null;
+      return;
+    }
+    const [next, ...rest] = bannerQueue;
+    bannerQueue = rest;
+    bannerActive = next;
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => {
+      bannerActive = null;
+      pumpBanner();
+    }, 1400); // ~1.4s per banner
+  }
+
+  /** Add a floating indicator at a player's seat (auto-expires). */
+  function addFloater(playerId: string, kind: "play" | "damage" | "heal" | "fate" | "death" | "draw", text: string): void {
+    const id = floaterId++;
+    const list = floaters[playerId] ?? [];
+    floaters = { ...floaters, [playerId]: [...list, { id, kind, text, ts: Date.now() }] };
+    setTimeout(() => {
+      const cur = floaters[playerId] ?? [];
+      floaters = { ...floaters, [playerId]: cur.filter((f) => f.id !== id) };
+    }, 1800);
+  }
+
+  /** React to the public event feed → drive banners + seat floaters. */
+  function animateEvents(events: { type: string; [k: string]: unknown }[]): void {
+    for (const e of events) {
+      const ev = e as { type: string; [k: string]: unknown };
+      switch (ev.type) {
+        case "turn_started": {
+          const who = ev.playerId === you?.id ? (lang === "en" ? "Your turn" : "ตาคุณ") : nameOfSeat(ev.playerId);
+          pushBanner(`${who}`, lang === "en" ? `Turn ${ev.turnNumber}` : `เทิร์น ${ev.turnNumber}`, "▶");
+          break;
+        }
+        case "phase_changed": {
+          const phaseMap: Record<string, string> = {
+            start: lang === "en" ? "Start of Turn" : "เริ่มเทิร์น",
+            draw: lang === "en" ? "Draw Phase" : "เฟสจั่วการ์ด",
+            play: lang === "en" ? "Play Phase" : "เฟสใช้การ์ด",
+            end: lang === "en" ? "End of Turn" : "จบเทิร์น",
+          };
+          if (ev.phase) pushBanner(phaseMap[String(ev.phase)] ?? String(ev.phase), nameOfSeat(ev.playerId), "⏱");
+          break;
+        }
+        case "card_played":
+          addFloater(String(ev.playerId), "play", `🎴 ${cardLabel(ev.cardId)}`);
+          break;
+        case "damage": {
+          const el = ev.element && ev.element !== "none" ? String(ev.element) : "";
+          addFloater(String(ev.targetId), "damage", `💥 −${ev.amount}${el ? " " + el : ""}`);
+          break;
+        }
+        case "heal":
+          addFloater(String(ev.targetId), "heal", `💚 +${ev.amount}`);
+          break;
+        case "cards_drawn":
+          addFloater(String(ev.playerId), "draw", `🂠 +${ev.count}`);
+          break;
+        case "fate_check": {
+          const who = ev.forPlayerId ? `${nameOfSeat(ev.forPlayerId)}` : "Fate";
+          addFloater(String(ev.forPlayerId ?? ""), "fate", `🎴 ${SUITS[String(ev.suit)] ?? "?"}${ev.number}`);
+          break;
+        }
+        case "death":
+          addFloater(String(ev.playerId), "death", "☠ DEAD");
+          break;
+        case "dying":
+          addFloater(String(ev.playerId), "fate", "🆘 dying!");
+          break;
+        case "reshuffle":
+          pushBanner(lang === "en" ? "Deck reshuffled" : "สับกองใหม่", undefined, "♻");
+          break;
+        case "sovereign_penalty":
+          addFloater(String(ev.playerId), "fate", "👑 all discarded");
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  function nameOfSeat(pid: unknown): string {
+    if (typeof pid !== "string") return "?";
+    if (pid === you?.id) return lang === "en" ? "you" : "คุณ";
+    return view?.others.find((o) => o.id === pid)?.name ?? pid.slice(0, 8);
+  }
+
+  function cardLabel(cid: unknown): string {
+    if (typeof cid !== "string") return "?";
+    const info = cardInfo(cid);
+    return info ? gameStore.cardName(info.defId) : cid.slice(0, 8);
+  }
+
+  // watch the event feed → animate
+  $effect(() => {
+    const events = gameStore.events;
+    if (events.length > 0) {
+      const last = events[events.length - 1] as { type: string; _seen?: number };
+      // animate only NEW events since last render (dedupe via shallow pointer)
+      if (last && (last as { _seen?: number })._seen !== gameStore.events.length) {
+        (last as { _seen?: number })._seen = gameStore.events.length;
+        animateEvents(events.slice(-12));
+      }
+    }
+  });
+
+  function openLog() {
+    logOpen = true;
+    onSend({ type: "log:history" });
+  }
 
   const SUITS: Record<string, string> = { spade: "♠", heart: "♥", club: "♣", diamond: "♦" };
 
@@ -193,6 +326,18 @@
     const def = other.equipDefs?.[slot as keyof typeof other.equipDefs];
     return def ? zoneArt(def) : undefined;
   };
+
+  /** Floater anchor: position near the player's seat around the table. */
+  function floaterLeft(pid: string): number {
+    if (pid === you?.id) return 50;
+    const seat = seats.find((s) => s.id === pid);
+    return seat?.left ?? 50;
+  }
+  function floaterTop(pid: string): number {
+    if (pid === you?.id) return 80;
+    const seat = seats.find((s) => s.id === pid);
+    return seat ? seat.top + 18 : 40;
+  }
 </script>
 
 <div class="table-screen">
@@ -210,6 +355,9 @@
         <span title="deck">{view.deckCount}🂠</span>
         <span title="discard">{view.discardCount}♻</span>
       </div>
+      <button class="lang-btn log-btn" onclick={openLog} title={lang === "en" ? "game history" : "ประวัติการเล่น"}>
+        📜 {lang === "en" ? "Log" : "บันทึก"}
+      </button>
       <button class="lang-btn" onclick={() => (gameStore.lang = lang === "en" ? "th" : "en")}>
         {lang === "en" ? "TH" : "EN"}
       </button>
@@ -314,6 +462,23 @@
           <button class="btn small" onclick={cancelTargeting}>{lang === "en" ? "cancel" : "ยกเลิก"}</button>
         </div>
       {/if}
+
+      <!-- turn/phase banner (center) -->
+      {#if bannerActive}
+        <div class="phase-banner" class:exit={bannerActive === null}>
+          <span class="b-icon">{bannerActive.icon}</span>
+          <span class="b-title">{bannerActive.title}</span>
+          {#if bannerActive.sub}<span class="b-sub">{bannerActive.sub}</span>{/if}
+        </div>
+      {/if}
+
+      <!-- seat floaters (card plays, damage, draws...) -->
+      {#each Object.entries(floaters) as [pid, list] (pid)}
+        {#each list as f (f.id)}
+          <div class="floater {`k-${f.kind}`}" style:left="{floaterLeft(pid)}%" style:top="{floaterTop(pid)}%"
+               >{f.text}</div>
+        {/each}
+      {/each}
     </div>
 
     {#if prompt && prompt.playerId === you.id}
@@ -326,6 +491,10 @@
         cardDetails={view.cardDetails}
         onClose={() => (identityFor = null)}
       />
+    {/if}
+
+    {#if logOpen}
+      <LogDrawer onClose={() => (logOpen = false)} />
     {/if}
   {/if}
 </div>
@@ -350,6 +519,7 @@
   .turn-info { flex: 1; color: var(--sovereign); letter-spacing: 0.05em; }
   .counts { display: flex; gap: 0.5rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
   .lang-btn { background: #2f2820; border: 1px solid #4a4034; color: var(--text-bone); font-family: inherit; padding: 0.2rem 0.5rem; cursor: pointer; }
+  .log-btn { border-color: var(--sovereign); color: var(--sovereign); }
 
   .table {
     position: relative;
@@ -449,6 +619,62 @@
     gap: 1px;
   }
   .feed-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* turn/phase banner — slides in center-top of the table */
+  .phase-banner {
+    position: absolute;
+    left: 50%;
+    top: 8%;
+    transform: translateX(-50%);
+    z-index: 20;
+    background: rgba(13, 11, 8, 0.92);
+    border: 2px solid var(--sovereign);
+    padding: 0.6rem 1.6rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    pointer-events: none;
+    box-shadow: 0 0 24px rgba(232, 197, 71, 0.25);
+    animation: banner-in 1.4s ease forwards;
+  }
+  @keyframes banner-in {
+    0% { opacity: 0; transform: translateX(-50%) translateY(-18px) scale(0.9); }
+    22% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.02); }
+    30% { transform: translateX(-50%) scale(1); }
+    82% { opacity: 1; }
+    100% { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  }
+  .b-icon { font-size: 1.3rem; }
+  .b-title { color: var(--sovereign); font-size: 1rem; letter-spacing: 0.12em; text-transform: uppercase; }
+  .b-sub { color: var(--text-dim); font-size: 0.72rem; }
+
+  /* seat floaters (card plays, damage, heals, draws) */
+  .floater {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    z-index: 18;
+    pointer-events: none;
+    background: rgba(13, 11, 8, 0.9);
+    border: 1px solid #4a4034;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.72rem;
+    color: var(--text-bone);
+    white-space: nowrap;
+    animation: float-up 1800ms ease-out forwards;
+  }
+  @keyframes float-up {
+    0% { opacity: 0; transform: translate(-50%, -20%) scale(0.8); }
+    15% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+    25% { transform: translate(-50%, -50%); }
+    75% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -130%); }
+  }
+  .floater.k-damage { border-color: #d94f3d; color: #ff9a80; }
+  .floater.k-heal { border-color: #4f9d4f; color: #a6e3a6; }
+  .floater.k-play { border-color: var(--syndicate); color: #bcd9f2; }
+  .floater.k-fate { border-color: var(--ascendant); color: #f5e0a0; }
+  .floater.k-death { border-color: #8b0000; color: #ffc0c0; font-weight: bold; }
 
   .targeting-bar {
     position: absolute;

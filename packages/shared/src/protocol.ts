@@ -38,6 +38,8 @@ export const ClientIntent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("game:endTurn"), discards: z.array(z.string()).optional() }),
   z.object({ type: z.literal("chat"), text: z.string().min(1).max(200) }),
   z.object({ type: z.literal("resync") }),
+  /** request the FULL public event log of the current game (e.g. on drawer open) */
+  z.object({ type: z.literal("log:history") }),
 ]);
 
 export type ClientIntentT = z.infer<typeof ClientIntent>;
@@ -114,6 +116,11 @@ export const ServerMsgGameEnded = z.object({
   roles: z.record(z.string(), z.string()), // playerId → role reveal
 });
 
+export const ServerMsgLogHistory = z.object({
+  type: z.literal("log:history"),
+  events: z.array(z.unknown()),
+});
+
 export const ServerMsg = z.discriminatedUnion("type", [
   ServerMsgHello,
   ServerMsgJoined,
@@ -124,6 +131,7 @@ export const ServerMsg = z.discriminatedUnion("type", [
   ServerMsgChat,
   ServerMsgError,
   ServerMsgGameEnded,
+  ServerMsgLogHistory,
 ]);
 
 export type ServerMsgT = z.infer<typeof ServerMsg>;

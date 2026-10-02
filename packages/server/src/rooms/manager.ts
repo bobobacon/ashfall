@@ -55,6 +55,14 @@ export interface Room {
   timers: Map<string, NodeJS.Timeout>;
   /** fan-out callback registered by the server transport */
   emit?: (target: string, msg: unknown) => void;
+  /** full public event log of the game (for the in-game history drawer).
+   *  Only public events are stored (no hands/offers/prompt internals). */
+  history: GameEvent[];
+}
+
+/** Full public log accessor (docs/02 §4.x — history drawer + post-game review). */
+export function roomHistory(room: Room): GameEvent[] {
+  return room.history;
 }
 
 /** Coded error with a stable code for the wire protocol. */
@@ -110,6 +118,7 @@ export class RoomManager {
       },
       createdAt: Date.now(),
       timers: new Map(),
+      history: [],
     };
     this.rooms.set(id, room);
     return { room, player };
@@ -369,6 +378,10 @@ export class RoomManager {
     if (!game) return;
 
     const events = game.log.drain();
+    // append public events to the room's history (for the log drawer)
+    for (const ev of events) {
+      if (isPublicEvent(ev)) room.history.push(ev);
+    }
     if (events.length > 0) this.broadcastEvents(room, events);
 
     if (game.state.phase === "ended") {

@@ -4,7 +4,14 @@ import type { Server } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
 import { ClientIntent, type ClientIntentT } from "@ashfall/shared";
-import { RoomManager, RoomError, type Room, type RoomPlayer } from "./rooms/manager.js";
+import {
+  RoomManager,
+  RoomError,
+  isPublicEvent,
+  roomHistory,
+  type Room,
+  type RoomPlayer,
+} from "./rooms/manager.js";
 import type { FastifyInstance } from "fastify";
 
 const APP_VERSION = process.env.APP_VERSION ?? "0.1.0";
@@ -16,6 +23,7 @@ interface Conn {
   id: string;
   ws: WebSocket;
   alive: boolean;
+  missedPings: number;
   /** rate window */
   tokens: number;
   lastRefill: number;
@@ -83,6 +91,7 @@ export function websocketServer(httpServer: Server, app?: FastifyInstance): WsGa
       id: randomUUID(),
       ws,
       alive: true,
+      missedPings: 0,
       tokens: MAX_MSG_PER_SEC,
       lastRefill: Date.now(),
     };
@@ -122,12 +131,16 @@ export function websocketServer(httpServer: Server, app?: FastifyInstance): WsGa
       handleIntent(conn, result.data);
     });
 
-    ws.on("close", () => {
+    ws.on("close", (code, reason) => {
+      if (process.env.ASHFALL_DEBUG || process.env.LOG_LEVEL === "debug") {
+        console.error(`[ws] close ${conn.id} room=${conn.room?.id ?? "-"} player=${conn.player?.name ?? "-"} code=${code} reason=${String(reason).slice(0, 80)}`);
+      }
       handleDisconnect(conn);
       conns.delete(conn.id);
     });
 
-    ws.on("error", () => {
+    ws.on("error", (err) => {
+      console.error(`[ws] error ${conn.id}: ${err.message}`);
       handleDisconnect(conn);
       conns.delete(conn.id);
     });
@@ -252,6 +265,12 @@ export function websocketServer(httpServer: Server, app?: FastifyInstance): WsGa
         });
         return;
       }
+      case "log:history": {
+        requireRoom(conn, (room) => {
+          send(conn, { type: "log:history", events: roomHistory(room) });
+        });
+        return;
+      }
       default: {
         // all game:* + chat intents require a seated player
         requireRoom(conn, (room) => {
@@ -293,15 +312,22 @@ export function websocketServer(httpServer: Server, app?: FastifyInstance): WsGa
     conn.spectatorOf = undefined;
   }
 
-  // heartbeat: ping every 20s, terminate after 2 missed pongs
+  // heartbeat: ping every 20s, terminate after 3 missed pongs (graceful)
   const heartbeat = setInterval(() => {
     for (const conn of conns.values()) {
       if (!conn.alive) {
-        conn.ws.terminate();
-        conns.delete(conn.id);
+        // dead / unresponsive — drop after 3 missed pings (≈60s)
+        conn.alive = false;
+        conn.missedPings = (conn.missedPings ?? 0) + 1;
+        if (conn.missedPings >= 3) {
+          conn.ws.terminate();
+          conns.delete(conn.id);
+          continue;
+        }
         continue;
       }
       conn.alive = false;
+      conn.missedPings = 0;
       conn.ws.ping();
     }
   }, HEARTBEAT_MS);

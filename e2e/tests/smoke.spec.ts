@@ -96,3 +96,27 @@ test("C-12: no horizontal scroll on narrow viewport", async ({ browser }) => {
   expect(overflow).toBeLessThanOrEqual(2);
   await page.close();
 });
+test("C-13: log drawer shows game history mid-game", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await page.getByPlaceholder("Wastelander").fill("LogHost");
+  await page.getByRole("button", { name: /⚔ Create room/ }).click();
+  await page.locator(".room-code .code").waitFor();
+  for (let i = 0; i < 2; i++) await page.getByRole("button", { name: /\+ Add bot/ }).click();
+  await page.getByRole("button", { name: /▶ Start game/ }).click();
+  await page.locator(".offers .card").first().waitFor();
+  await page.locator(".offers .card").first().click();
+  await page.locator(".me-zone").waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(2500);
+
+  // open the log drawer — history loads async via log:history
+  await page.getByRole("button", { name: /📜 Log/ }).click();
+  await expect(page.locator(".drawer")).toBeVisible();
+  await expect(page.locator(".drawer .turn-head").first()).toBeVisible({ timeout: 10_000 });
+  const firstHead = (await page.locator(".drawer .turn-head").first().textContent()) ?? "";
+  expect(firstHead.trim()).toMatch(/Setup|เทิร์น|Turn/);
+  // close it
+  await page.locator(".drawer .close").click();
+  await expect(page.locator(".drawer")).toHaveCount(0);
+});
